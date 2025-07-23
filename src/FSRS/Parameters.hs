@@ -40,10 +40,10 @@ data Parameters = Parameters
   , wForgetStabilityStabilityExp :: Double -- 13
   , wForgetStabilityRetrievabilityCoef :: Double -- 14
 
-  , wShortTermStabilityBoost :: Double -- 17
+  , wShortTermStabilityExpCoef :: Double -- 17
   , wShortTermStabilityRatingNormalization :: Double -- 18
   , wShortTermStabilityStabilityExp :: Double -- 19
-  , wRetrievablityDecay :: Double -- 20
+  , wRetrievabilityDecay :: Double -- 20
   } deriving (Show, Eq)
 
 instance FromJSON Parameters where
