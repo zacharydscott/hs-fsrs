@@ -4,18 +4,18 @@ module FSRS.Card where
 
 import Data.Aeson (
   FromJSON (parseJSON),
-  Options (fieldLabelModifier),
   ToJSON (toJSON),
   Value (Number),
-  defaultOptions,
   genericParseJSON,
   genericToJSON,
   withScientific
   )
-import Data.Int (Int32)
 import Data.Time.Clock (UTCTime)
 import GHC.Generics (Generic)
 import FSRS.Utils (genericParseOptionsWithPrefix)
+
+type Stability = Double
+type Difficulty = Double
 
 -- | Serializes to 0, 1, 2, and 3 for New, Learning,
 -- | Reviewing, and Relearning, respectively.
@@ -26,15 +26,15 @@ data CardState = New
                  deriving (Show, Eq)
 
 data Card = Card
-  { cardState       :: CardState
+  { cardId          :: Int
+  , cardState       :: CardState
   , cardDue         :: UTCTime
-  , cardLastReview  :: UTCTime
-  , cardElapsedDays :: Int32
-  , cardStep        :: Int32
-  , cardLapses      :: Int32
-  , cardRepetitions :: Int32
-  , cardStability   :: Double
-  , cardDifficulty  :: Double
+  , cardLastReview  :: Maybe UTCTime
+  , cardStep        :: Int
+  , cardLapses      :: Int
+  , cardRepetitions :: Int
+  , cardStability   :: Stability
+  , cardDifficulty  :: Difficulty
   } deriving (Show, Eq, Generic)
 
 instance FromJSON CardState where

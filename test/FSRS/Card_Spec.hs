@@ -18,10 +18,10 @@ exampleTime2 = UTCTime (fromGregorian 1970 1 2) (secondsToDiffTime 0)
 
 testCard :: Card
 testCard = Card
-  { cardState = New
+  { cardId .= 11
+  , cardState = New
   , cardDue = exampleTime2
   , cardLastReview = exampleTime1
-  , cardElapsedDays = 0
   , cardLapses = 1
   , cardStep = 2
   , cardRepetitions = 3
@@ -30,10 +30,10 @@ testCard = Card
   }
 expectedObject :: Value
 expectedObject = object
-  [ "state" .= Number 0
+  [ "id" .= 11
+  , "state" .= Number 0
   , "due" .= iso8601Show exampleTime2
   , "lastReview" .= iso8601Show exampleTime1
-  , "elapsedDays" .= Number 0
   , "lapses" .= Number 1
   , "step" .= Number 2
   , "repetitions" .= Number 3

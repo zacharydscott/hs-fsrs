@@ -22,6 +22,7 @@ library
     import:           warnings
     exposed-modules:  FSRS
                     , FSRS.Card
+                    , FSRS.ReviewLog
                     , FSRS.Parameters
                     , FSRS.Rating
                     , FSRS.Schedule
