@@ -12,6 +12,8 @@ import FSRS.Rating (Rating(..), fromRating)
 import Data.Time (NominalDiffTime, diffUTCTime, nominalDay, addUTCTime, UTCTime, getCurrentTime)
 import FSRS.Utils (bound)
 import FSRS.ReviewLog (ReviewLog (..))
+import Data.List (foldl')
+import System.Random (randomRIO)
 
 data SchedulingConfig = SchedulingConfig
   { scParameters       :: Parameters
@@ -68,11 +70,11 @@ reviewCardWithFuzz conf card rating reviewDate reviewDuration = do
         Reviewing -> updateReviewingCard conf card rating mElapsedDays
         Relearning -> updateRelearningCard conf card rating mElapsedDays
       didLapse = rating == Again && cardState card == Reviewing
-  fuzzedInterval <- getFuzzedInterval $ suInterval update
+  fuzzedInterval <- getFuzzedInterval conf (suInterval update)
   let updatedCard = Card
         { cardId = cardId card
         , cardState = suState update
-        , cardDue =  suInterval update `addUTCTime` reviewDate
+        , cardDue =  fuzzedInterval `addUTCTime` reviewDate
         , cardLastReview = Just reviewDate
         , cardStep = suStep update
         , cardLapses = cardLapses card + if didLapse then 1 else 0
@@ -93,8 +95,6 @@ reviewCardWithFuzzAndCurrentTime :: SchedulingConfig -> Card -> Rating -> Nomina
 reviewCardWithFuzzAndCurrentTime s c r d = do
   currentTime <- getCurrentTime
   reviewCardWithFuzz s c r currentTime d
-
-
 
 updateNewCard :: SchedulingConfig -> Card -> Rating -> SchedulingUpdate
 updateNewCard conf card rating =
@@ -122,7 +122,7 @@ updateNewCard conf card rating =
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
 updateLearningCard :: SchedulingConfig -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
-updateLearningCard conf card rating mElapsedDays = 
+updateLearningCard conf card rating mElapsedDays =
   let updatedStability = shortOrLongTermStability conf card rating mElapsedDays
       updatedDifficulty = nextDifficulty conf (cardDifficulty card) rating
       learningSteps = scLearningSteps conf
@@ -294,8 +294,30 @@ cardRetrievability conf card mElapsedDays = case mElapsedDays of
   Just elapsedDays -> let decay = -(wRetrievabilityDecay $ scParameters conf)
                       in (1 + decayFactor decay * realToFrac elapsedDays / cardStability card)
 
-getFuzzedInterval :: NominalDiffTime -> IO NominalDiffTime
-getFuzzedInterval interval = if interval / nominalDay < 2.5
+getFuzzedInterval :: SchedulingConfig -> NominalDiffTime -> IO NominalDiffTime
+getFuzzedInterval conf interval = if interval / nominalDay < 2.5
   then pure interval
-  else pure interval
+  else do
+    let intervalDays = realToFrac (floor $ interval / nominalDay :: Integer)
+        delta = getDeltaForInterval intervalDays
+        maxIntr = min (round $ intervalDays + delta) (scMaximumInterval conf)
+        minIntr = min maxIntr (max 2 (round $ intervalDays - delta))
+    fuzzedIntr <- randomRIO (minIntr, maxIntr)
+    return $ nominalDay * realToFrac (min fuzzedIntr (scMaximumInterval conf))
+
+fuzzRanges :: [(NominalDiffTime, Maybe NominalDiffTime, NominalDiffTime)]
+fuzzRanges =
+  [ (2.5, Just 7.0, 0.15)
+  , (7.0, Just 20.0, 0.1)
+  , (20.0, Nothing, 0.05)
+  ]
+
+getDeltaForInterval :: NominalDiffTime -> NominalDiffTime
+getDeltaForInterval interval =
+  foldl' (fuzzRangeStep interval) 1 fuzzRanges
+  where factorCap intr maybeTime = case maybeTime of
+          Nothing -> intr
+          Just upperBound -> min upperBound intr
+        fuzzRangeStep intr delta (start, end, factor) =
+          delta + factor * max (factorCap intr end - start) 0
 

@@ -33,6 +33,7 @@ library
                     , aeson ^>= 2.2.3.0
                     , vector
                     , scientific
+                    , random
     hs-source-dirs:   src
     default-language: Haskell2010
 
@@ -41,6 +42,7 @@ test-suite hs-fsrs-test
     default-language: Haskell2010
     other-modules:   FSRS.Card_Spec
                    , FSRS.Parameters_Spec
+                   , FSRS.Schedule_Spec
     -- other-extensions:
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test

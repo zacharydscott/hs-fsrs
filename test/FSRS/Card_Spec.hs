@@ -5,20 +5,19 @@ module FSRS.Card_Spec (spec) where
 import Data.Aeson
 import Data.Time
 import Data.Time.Format.ISO8601
-import Data.ByteString.Lazy
 import Test.Hspec
 
 import FSRS.Card
 
-exampleTime1 :: UTCTime
-exampleTime1 = UTCTime (fromGregorian 1970 1 1) (secondsToDiffTime 0)
+exampleTime1 :: Maybe UTCTime
+exampleTime1 = Just $ UTCTime (fromGregorian 1970 1 1) (secondsToDiffTime 0)
 
 exampleTime2 :: UTCTime
 exampleTime2 = UTCTime (fromGregorian 1970 1 2) (secondsToDiffTime 0)
 
 testCard :: Card
 testCard = Card
-  { cardId .= 11
+  { cardId = 11
   , cardState = New
   , cardDue = exampleTime2
   , cardLastReview = exampleTime1
@@ -30,10 +29,10 @@ testCard = Card
   }
 expectedObject :: Value
 expectedObject = object
-  [ "id" .= 11
+  [ "id" .= Number 11
   , "state" .= Number 0
   , "due" .= iso8601Show exampleTime2
-  , "lastReview" .= iso8601Show exampleTime1
+  , "lastReview" .= maybe "" iso8601Show exampleTime1
   , "lapses" .= Number 1
   , "step" .= Number 2
   , "repetitions" .= Number 3
