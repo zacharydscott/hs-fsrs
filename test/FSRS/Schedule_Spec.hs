@@ -15,12 +15,12 @@ baseTime :: UTCTime
 baseTime = UTCTime (fromGregorian 2025 1 1) (secondsToDiffTime 0)
 
 -- A minimal config for testing
-testConfig :: SchedulingConfig
-testConfig = SchedulingConfig
+testConfig :: Scheduler
+testConfig = Scheduler
   { scParameters       = defaultParameters
   , scDesiredRetention = 0.9
-  , scLearningSteps    = [60, 600]  -- 1 min, 10 min
-  , scRelearningSteps  = [600]      -- 10 min
+  , scLearningSteps    = [60, 600]
+  , scRelearningSteps  = [600]
   , scMaximumInterval  = 365
   }
 
@@ -36,6 +36,19 @@ newCard = Card
   , cardRepetitions= 0
   , cardStability  = 0
   , cardDifficulty = 0
+  }
+
+learningCard :: Card
+learningCard = Card
+  { cardId         = 1
+  , cardState      = Learning
+  , cardDue        = baseTime
+  , cardLastReview = Nothing
+  , cardStep       = 0
+  , cardLapses     = 0
+  , cardRepetitions= 0
+  , cardStability  = 2
+  , cardDifficulty = 3
   }
 
 spec :: Spec

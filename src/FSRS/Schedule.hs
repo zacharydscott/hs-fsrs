@@ -1,27 +1,39 @@
+{-# LANGUAGE DeriveGeneric #-}
 module FSRS.Schedule (
-  SchedulingConfig(..),
+  Scheduler(..),
+  defaultScheduler,
   reviewCard,
-  reviewCardWithFuzz,
-  reviewCardWithCurrentTime,
-  reviewCardWithFuzzAndCurrentTime
+  reviewCardAtTime,
+  reviewCardFuzz,
+  reviewCardFuzzAtTime,
 ) where
 
 import FSRS.Card (Card(..), CardState(..), Difficulty, Stability)
-import FSRS.Parameters (Parameters(..), stabilityMin, difficultyMin, difficultyMax)
+import FSRS.Parameters (Parameters(..), stabilityMin, difficultyMin, difficultyMax, defaultParameters)
 import FSRS.Rating (Rating(..), fromRating)
 import Data.Time (NominalDiffTime, diffUTCTime, nominalDay, addUTCTime, UTCTime, getCurrentTime)
-import FSRS.Utils (bound)
+import FSRS.Utils (bound, nominalMinute)
 import FSRS.ReviewLog (ReviewLog (..))
 import Data.List (foldl')
 import System.Random (randomRIO)
+import GHC.Generics (Generic)
 
-data SchedulingConfig = SchedulingConfig
+data Scheduler = Scheduler
   { scParameters       :: Parameters
   , scDesiredRetention :: Double
   , scLearningSteps    :: [NominalDiffTime]
   , scRelearningSteps  :: [NominalDiffTime]
   , scMaximumInterval  :: Int
-  } deriving (Show)
+  } deriving (Show, Eq, Generic)
+
+defaultScheduler :: Scheduler
+defaultScheduler = Scheduler
+  { scParameters = defaultParameters
+  , scDesiredRetention = 0.9
+  , scLearningSteps = [1 * nominalMinute, 10 * nominalMinute]
+  , scRelearningSteps = [ 10 * nominalMinute]
+  , scMaximumInterval = 36500
+  }
 
 -- | This is an intermediate card update value which is for internal to scheduling module only.
 -- | This is used to keep the actual update functions purely focused on changes to the card, so:
@@ -37,8 +49,15 @@ data SchedulingUpdate = SchedulingUpdate
   , suStep       :: Int
   }
 
-reviewCard :: SchedulingConfig -> Card -> Rating -> UTCTime -> NominalDiffTime -> (Card, ReviewLog)
-reviewCard conf card rating reviewDate reviewDuration =
+-- | reviews a card using the current time as the review date
+reviewCard :: Scheduler -> NominalDiffTime -> Card -> Rating -> IO (Card, ReviewLog)
+reviewCard s d c r = reviewCardAtTime s d c r <$> getCurrentTime
+
+reviewCardFuzz :: Scheduler -> NominalDiffTime -> Card -> Rating -> IO (Card, ReviewLog)
+reviewCardFuzz s d c r = getCurrentTime >>= reviewCardFuzzAtTime s d c r 
+
+reviewCardAtTime :: Scheduler -> NominalDiffTime -> Card -> Rating -> UTCTime -> (Card, ReviewLog)
+reviewCardAtTime conf reviewDuration card rating reviewDate =
   let mElapsedDays = daysSinceLastReview card reviewDate
       update = case cardState card of
         New -> updateNewCard conf card rating
@@ -60,9 +79,9 @@ reviewCard conf card rating reviewDate reviewDuration =
       reviewLog = ReviewLog (cardId card) rating reviewDate reviewDuration
   in (updatedCard, reviewLog)
 
-reviewCardWithFuzz ::
-  SchedulingConfig -> Card -> Rating -> UTCTime -> NominalDiffTime -> IO (Card, ReviewLog)
-reviewCardWithFuzz conf card rating reviewDate reviewDuration = do
+reviewCardFuzzAtTime ::
+  Scheduler -> NominalDiffTime -> Card -> Rating -> UTCTime -> IO (Card, ReviewLog)
+reviewCardFuzzAtTime conf reviewDuration card rating reviewDate = do
   let mElapsedDays = daysSinceLastReview card reviewDate
       update = case cardState card of
         New -> updateNewCard conf card rating
@@ -85,18 +104,7 @@ reviewCardWithFuzz conf card rating reviewDate reviewDuration = do
       reviewLog = ReviewLog (cardId card) rating reviewDate reviewDuration
   return (updatedCard, reviewLog)
 
--- | reviews a card using the current time as the review date
-reviewCardWithCurrentTime :: SchedulingConfig -> Card -> Rating -> NominalDiffTime -> IO (Card, ReviewLog)
-reviewCardWithCurrentTime s c r d = do
-  currentTime <- getCurrentTime
-  return $ reviewCard s c r currentTime d
-
-reviewCardWithFuzzAndCurrentTime :: SchedulingConfig -> Card -> Rating -> NominalDiffTime -> IO (Card, ReviewLog)
-reviewCardWithFuzzAndCurrentTime s c r d = do
-  currentTime <- getCurrentTime
-  reviewCardWithFuzz s c r currentTime d
-
-updateNewCard :: SchedulingConfig -> Card -> Rating -> SchedulingUpdate
+updateNewCard :: Scheduler -> Card -> Rating -> SchedulingUpdate
 updateNewCard conf card rating =
   let params = scParameters conf
       updatedStability = initialStability params rating
@@ -121,7 +129,7 @@ updateNewCard conf card rating =
                 else partialUpdate (learningSteps !! step + 1) Learning (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
-updateLearningCard :: SchedulingConfig -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
+updateLearningCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
 updateLearningCard conf card rating mElapsedDays =
   let updatedStability = shortOrLongTermStability conf card rating mElapsedDays
       updatedDifficulty = nextDifficulty conf (cardDifficulty card) rating
@@ -145,7 +153,7 @@ updateLearningCard conf card rating mElapsedDays =
                 else partialUpdate (learningSteps !! step + 1) Learning (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
-updateReviewingCard :: SchedulingConfig -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
+updateReviewingCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
 updateReviewingCard conf card rating mElapsedDays =
   let difficulty = cardDifficulty card
       updatedStability = shortOrLongTermStability conf card rating mElapsedDays
@@ -159,7 +167,7 @@ updateReviewingCard conf card rating mElapsedDays =
   in SchedulingUpdate updatedStability updatedDifficulty updatedInterval updataedState 0
 
 
-updateRelearningCard :: SchedulingConfig -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
+updateRelearningCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
 updateRelearningCard conf card rating mElapsedDays =
   let difficulty = cardDifficulty card
       updatedStability = shortOrLongTermStability conf card rating mElapsedDays
@@ -184,7 +192,7 @@ updateRelearningCard conf card rating mElapsedDays =
                 else partialUpdate (relearningSteps !! step + 1) Learning (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
-shortOrLongTermStability :: SchedulingConfig -> Card -> Rating -> Maybe NominalDiffTime -> Stability
+shortOrLongTermStability :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> Stability
 shortOrLongTermStability conf card rating mElapsedDays
   | Just d <- mElapsedDays, d < 1 = shortTerm
   | otherwise                     = longTerm
@@ -218,7 +226,7 @@ clampDifficulty = bound difficultyMin difficultyMax
 decayFactor :: Double -> Double
 decayFactor decay = 0.9 ** (1 / decay) - 1
 
-nextInterval :: SchedulingConfig -> Stability -> NominalDiffTime
+nextInterval :: Scheduler -> Stability -> NominalDiffTime
 nextInterval conf stability =
   let decay = -(wRetrievabilityDecay $ scParameters conf)
       ret = scDesiredRetention conf
@@ -226,7 +234,7 @@ nextInterval conf stability =
       rawNextInterval = (stability / decayFactor decay) * (ret ** (1/(-decay)) - 1)
   in nominalDay * realToFrac (bound 1 maxInt (round rawNextInterval))
 
-shortTermStability :: SchedulingConfig -> Stability -> Rating -> Double
+shortTermStability :: Scheduler -> Stability -> Rating -> Double
 shortTermStability conf stability rating =
   let params = scParameters conf
       boost = wShortTermStabilityExpCoef params
@@ -238,7 +246,7 @@ shortTermStability conf stability rating =
         else shortTermInc
   in clampStability $ stability * shortTermInc'
 
-nextDifficulty :: SchedulingConfig -> Difficulty -> Rating -> Double
+nextDifficulty :: Scheduler -> Difficulty -> Rating -> Double
 nextDifficulty conf difficulty rating =
   let params = scParameters conf
       dc = wDifficultyDeltaCoef params
@@ -249,12 +257,12 @@ nextDifficulty conf difficulty rating =
       meanReversionDifficulty = mr * easyDifficulty + (1 - mr) * dampedDifficulty
   in clampDifficulty meanReversionDifficulty
 
-nextStability :: SchedulingConfig -> Difficulty -> Double -> Rating -> Stability -> Double
+nextStability :: Scheduler -> Difficulty -> Double -> Rating -> Stability -> Double
 nextStability conf difficulty retrievability rating stability = clampStability $ case rating of
   Again -> nextForgetStability conf difficulty retrievability stability
   _ -> nextRecallStability conf difficulty retrievability rating stability
 
-nextForgetStability :: SchedulingConfig -> Difficulty -> Double -> Stability -> Double
+nextForgetStability :: Scheduler -> Difficulty -> Double -> Stability -> Double
 nextForgetStability conf difficulty retrievability stability =
   let params = scParameters conf
       longTermBase = wForgetStabilityLongTermBase params
@@ -271,7 +279,7 @@ nextForgetStability conf difficulty retrievability stability =
       shortTermVersion = stability / exp (stStabExp * stRatingNorm)
   in min longTermVersion shortTermVersion
 
-nextRecallStability :: SchedulingConfig -> Difficulty -> Double -> Rating -> Stability -> Double
+nextRecallStability :: Scheduler -> Difficulty -> Double -> Rating -> Stability -> Double
 nextRecallStability conf difficulty retrievability rating stability =
   let params = scParameters conf
       hardPenalty = if rating == Hard then wRecallStabilityHardPenalty params else 1
@@ -288,13 +296,13 @@ nextRecallStability conf difficulty retrievability rating stability =
         * easyBonus
   in stability * (1 + stabilityMultiplier)
 
-cardRetrievability :: SchedulingConfig -> Card -> Maybe NominalDiffTime -> Double
+cardRetrievability :: Scheduler -> Card -> Maybe NominalDiffTime -> Double
 cardRetrievability conf card mElapsedDays = case mElapsedDays of
   Nothing -> 0
   Just elapsedDays -> let decay = -(wRetrievabilityDecay $ scParameters conf)
                       in (1 + decayFactor decay * realToFrac elapsedDays / cardStability card)
 
-getFuzzedInterval :: SchedulingConfig -> NominalDiffTime -> IO NominalDiffTime
+getFuzzedInterval :: Scheduler -> NominalDiffTime -> IO NominalDiffTime
 getFuzzedInterval conf interval = if interval / nominalDay < 2.5
   then pure interval
   else do

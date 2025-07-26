@@ -10,9 +10,10 @@ import Data.Aeson (
   genericToJSON,
   withScientific
   )
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (UTCTime, getCurrentTime)
 import GHC.Generics (Generic)
-import FSRS.Utils (genericParseOptionsWithPrefix)
+import FSRS.Utils (genericParseOptionsWithPrefix, blankDate)
+import Data.Time.Clock.POSIX (getPOSIXTime)
 
 type Stability = Double
 type Difficulty = Double
@@ -36,6 +37,29 @@ data Card = Card
   , cardStability   :: Stability
   , cardDifficulty  :: Difficulty
   } deriving (Show, Eq, Generic)
+
+blankCard :: Card
+blankCard = Card
+  { cardId          = 0
+  , cardState       = New
+  , cardDue         = blankDate
+  , cardLastReview  = Nothing
+  , cardStep        = 0
+  , cardLapses      = 0
+  , cardRepetitions = 0
+  , cardStability   = 0.0
+  , cardDifficulty  = 0.0
+  }
+
+-- | make a new card with given id and state
+mkCard :: Int -> CardState -> Card
+mkCard cid state = blankCard { cardId = cid, cardState = state }
+
+-- | Create's a new card using the current time in milliseconds since Unix Epoch
+newCard :: IO Card
+newCard = do
+  posixTime <- round . (*1000) <$> getPOSIXTime
+  return $ mkCard posixTime New
 
 instance FromJSON CardState where
   parseJSON = withScientific "FSRS Card State" $ \v ->

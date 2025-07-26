@@ -8,6 +8,7 @@ import Data.Time.Format.ISO8601
 import Test.Hspec
 
 import FSRS.Card
+import Data.Either (isLeft)
 
 exampleTime1 :: Maybe UTCTime
 exampleTime1 = Just $ UTCTime (fromGregorian 1970 1 1) (secondsToDiffTime 0)
@@ -27,6 +28,7 @@ testCard = Card
   , cardStability = 0.5
   , cardDifficulty = 0.6
   }
+
 expectedObject :: Value
 expectedObject = object
   [ "id" .= Number 11
@@ -52,7 +54,10 @@ spec = do
       eitherDecode "0" `shouldBe` Right New
       eitherDecode "1" `shouldBe` Right Learning
       eitherDecode "2" `shouldBe` Right Reviewing
-      eitherDecode "3" `shouldBe` Right Relearning
+    it "should fail to deserialize out‑of‑range numbers" $ do
+      (eitherDecode "4" :: Either String CardState) `shouldSatisfy` isLeft
+      (eitherDecode "-1" :: Either String CardState) `shouldSatisfy` isLeft
+
   describe "FSRS Card" $ do
     it "should serialize Card data to JSON correctly" $ do
       toJSON testCard `shouldBe` expectedObject
@@ -60,3 +65,19 @@ spec = do
     it "Should be the same after serializing and deserializing" $ do
       let encodedTestCard = encode testCard
       eitherDecode encodedTestCard `shouldBe` Right testCard
+    it "should fail to parse a JSON with wrong field types" $ do
+      -- put a string where a number is expected
+      let bad2 = object
+            [ "id"        .= String "eleven"
+            , "state"     .= Number 0
+            , "due"       .= iso8601Show exampleTime2
+            , "lastReview".= maybe "" iso8601Show exampleTime1
+            , "lapses"    .= Number 1
+            , "step"      .= Number 2
+            , "repetitions".= Number 3
+            , "stability" .= Number 0.5
+            , "difficulty".= Number 0.6
+            ]
+      case (fromJSON bad2 :: Result Card) of
+        Error _ -> pure ()
+        Success _ -> expectationFailure "Expected failure on wrong field type"

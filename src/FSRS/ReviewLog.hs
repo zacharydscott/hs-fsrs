@@ -8,4 +8,4 @@ data ReviewLog = ReviewLog
   , revLogRating         :: Rating
   , revLogDatetime       :: UTCTime
   , revLogReviewDuration :: NominalDiffTime
-  }
+  } deriving (Show, Eq)
