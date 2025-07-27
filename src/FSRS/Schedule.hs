@@ -12,11 +12,12 @@ import FSRS.Card (Card(..), CardState(..), Difficulty, Stability)
 import FSRS.Parameters (Parameters(..), stabilityMin, difficultyMin, difficultyMax, defaultParameters)
 import FSRS.Rating (Rating(..), fromRating)
 import Data.Time (NominalDiffTime, diffUTCTime, nominalDay, addUTCTime, UTCTime, getCurrentTime)
-import FSRS.Utils (bound, nominalMinute)
+import FSRS.Utils (bound, nominalMinute, genericParseOptionsWithPrefix)
 import FSRS.ReviewLog (ReviewLog (..))
 import Data.List (foldl')
 import System.Random (randomRIO)
 import GHC.Generics (Generic)
+import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), genericParseJSON, genericToJSON)
 
 data Scheduler = Scheduler
   { scParameters       :: Parameters
@@ -26,12 +27,18 @@ data Scheduler = Scheduler
   , scMaximumInterval  :: Int
   } deriving (Show, Eq, Generic)
 
+instance FromJSON Scheduler where
+  parseJSON = genericParseJSON $ genericParseOptionsWithPrefix "sc"
+
+instance ToJSON Scheduler where
+  toJSON = genericToJSON $ genericParseOptionsWithPrefix "sc"
+
 defaultScheduler :: Scheduler
 defaultScheduler = Scheduler
   { scParameters = defaultParameters
   , scDesiredRetention = 0.9
   , scLearningSteps = [1 * nominalMinute, 10 * nominalMinute]
-  , scRelearningSteps = [ 10 * nominalMinute]
+  , scRelearningSteps = [10 * nominalMinute]
   , scMaximumInterval = 36500
   }
 
@@ -126,7 +133,7 @@ updateNewCard conf card rating =
               in partialUpdate updatedInterval Learning step
       Good -> if step + 1 == length learningSteps
                 then partialUpdate (nextInterval conf updatedStability) Reviewing 0
-                else partialUpdate (learningSteps !! step + 1) Learning (step + 1)
+                else partialUpdate (learningSteps !! (step + 1)) Learning (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
 updateLearningCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
@@ -150,7 +157,7 @@ updateLearningCard conf card rating mElapsedDays =
               in partialUpdate updatedInterval Learning step
       Good -> if step + 1 == length learningSteps
                 then partialUpdate (nextInterval conf updatedStability) Reviewing 0
-                else partialUpdate (learningSteps !! step + 1) Learning (step + 1)
+                else partialUpdate (learningSteps !! (step + 1)) Learning (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
 updateReviewingCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
@@ -178,7 +185,7 @@ updateRelearningCard conf card rating mElapsedDays =
   in if null relearningSteps || (step >= length relearningSteps && rating /= Again)
     then partialUpdate (nextInterval conf updatedStability) Reviewing 0
     else case rating of
-      Again -> partialUpdate (head relearningSteps) Learning 0
+      Again -> partialUpdate (head relearningSteps) Relearning 0
       Hard -> let updatedInterval
                    | step == 0 && length relearningSteps == 1
                    = head relearningSteps * 1.5
@@ -186,10 +193,10 @@ updateRelearningCard conf card rating mElapsedDays =
                    = let (s1:s2:_) = relearningSteps in (s1 + s2) / 2
                    | otherwise
                    = relearningSteps !! step
-              in partialUpdate updatedInterval Learning step
+              in partialUpdate updatedInterval Relearning step
       Good -> if step + 1 == length relearningSteps
                 then partialUpdate (nextInterval conf updatedStability) Reviewing 0
-                else partialUpdate (relearningSteps !! step + 1) Learning (step + 1)
+                else partialUpdate (relearningSteps !! (step + 1)) Reviewing (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
 shortOrLongTermStability :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> Stability
@@ -199,63 +206,6 @@ shortOrLongTermStability conf card rating mElapsedDays
   where shortTerm = shortTermStability conf (cardStability card) rating
         longTerm = let retrievability = cardRetrievability conf card mElapsedDays
                    in nextStability conf (cardDifficulty card) retrievability rating (cardStability card)
-
--- Fractional of the number of days
-daysSinceLastReview :: Card  -> UTCTime -> Maybe NominalDiffTime
-daysSinceLastReview card reviewDate = fmap (\lastReview -> reviewDate `diffUTCTime` lastReview / nominalDay) (cardLastReview card)
-
-initialStability :: Parameters -> Rating -> Stability
-initialStability params rating = clampStability $ case rating of
-  Again -> wInitialStabilityAgain params
-  Hard  -> wInitialStabilityHard  params
-  Good  -> wInitialStabilityGood  params
-  Easy  -> wInitialStabilityEasy  params
-
-initialDifficulty :: Parameters -> Rating -> Difficulty
-initialDifficulty params rating = clampDifficulty $
-  let difficultyBase = wInitialDifficultyBaseline params
-      ratingCoef = wInitialDifficultyRatingCoef params
-  in difficultyBase + 1 - exp (ratingCoef * fromRating rating)
-
-clampStability :: Stability -> Stability
-clampStability stab = max stab stabilityMin
-
-clampDifficulty :: Difficulty -> Difficulty
-clampDifficulty = bound difficultyMin difficultyMax
-
-decayFactor :: Double -> Double
-decayFactor decay = 0.9 ** (1 / decay) - 1
-
-nextInterval :: Scheduler -> Stability -> NominalDiffTime
-nextInterval conf stability =
-  let decay = -(wRetrievabilityDecay $ scParameters conf)
-      ret = scDesiredRetention conf
-      maxInt = scMaximumInterval conf
-      rawNextInterval = (stability / decayFactor decay) * (ret ** (1/(-decay)) - 1)
-  in nominalDay * realToFrac (bound 1 maxInt (round rawNextInterval))
-
-shortTermStability :: Scheduler -> Stability -> Rating -> Double
-shortTermStability conf stability rating =
-  let params = scParameters conf
-      boost = wShortTermStabilityExpCoef params
-      rn = wShortTermStabilityRatingNormalization params
-      se = wShortTermStabilityStabilityExp params
-      shortTermInc = exp (boost * (fromRating rating - 2 + rn)) * (stability ** (-se))
-      shortTermInc' = if rating == Good || rating == Easy
-        then max 1 shortTermInc
-        else shortTermInc
-  in clampStability $ stability * shortTermInc'
-
-nextDifficulty :: Scheduler -> Difficulty -> Rating -> Double
-nextDifficulty conf difficulty rating =
-  let params = scParameters conf
-      dc = wDifficultyDeltaCoef params
-      mr = wDifficultyMeanReversion params
-      easyDifficulty = initialDifficulty params Easy
-      difficultyDelta = -(dc * (fromRating rating - 2))
-      dampedDifficulty = difficulty + (10 - difficulty) * difficultyDelta / 9
-      meanReversionDifficulty = mr * easyDifficulty + (1 - mr) * dampedDifficulty
-  in clampDifficulty meanReversionDifficulty
 
 nextStability :: Scheduler -> Difficulty -> Double -> Rating -> Stability -> Double
 nextStability conf difficulty retrievability rating stability = clampStability $ case rating of
@@ -296,11 +246,69 @@ nextRecallStability conf difficulty retrievability rating stability =
         * easyBonus
   in stability * (1 + stabilityMultiplier)
 
+shortTermStability :: Scheduler -> Stability -> Rating -> Double
+shortTermStability conf stability rating =
+  let params = scParameters conf
+      boost = wShortTermStabilityExpCoef params
+      rn = wShortTermStabilityRatingNormalization params
+      se = wShortTermStabilityStabilityExp params
+      shortTermInc = exp (boost * (fromRating rating - 3 + rn)) * (stability ** (-se))
+      shortTermInc' = if rating == Good || rating == Easy
+        then max 1 shortTermInc
+        else shortTermInc
+  in clampStability $ stability * shortTermInc'
+
+-- Fractional of the number of days
+daysSinceLastReview :: Card  -> UTCTime -> Maybe NominalDiffTime
+daysSinceLastReview card reviewDate = fmap (\lastReview -> max 0 $ reviewDate `diffUTCTime` lastReview / nominalDay) (cardLastReview card)
+
+initialStability :: Parameters -> Rating -> Stability
+initialStability params rating = clampStability $ case rating of
+  Again -> wInitialStabilityAgain params
+  Hard  -> wInitialStabilityHard  params
+  Good  -> wInitialStabilityGood  params
+  Easy  -> wInitialStabilityEasy  params
+
+initialDifficulty :: Parameters -> Rating -> Difficulty
+initialDifficulty params rating = clampDifficulty $
+  let difficultyBase = wInitialDifficultyBaseline params
+      ratingCoef = wInitialDifficultyRatingCoef params
+  in difficultyBase + 1 - exp (ratingCoef * (fromRating rating - 1))
+
+clampStability :: Stability -> Stability
+clampStability stab = max stab stabilityMin
+
+clampDifficulty :: Difficulty -> Difficulty
+clampDifficulty = bound difficultyMin difficultyMax
+
+decayFactor :: Double -> Double
+decayFactor decay = 0.9 ** (1 / decay) - 1
+
+nextInterval :: Scheduler -> Stability -> NominalDiffTime
+nextInterval conf stability =
+  let decay = -(wRetrievabilityDecay $ scParameters conf)
+      ret = scDesiredRetention conf
+      maxIntr = scMaximumInterval conf
+      rawNextInterval = (stability / decayFactor decay) * (ret ** (1 / decay) - 1)
+  in nominalDay * realToFrac (bound 1 maxIntr (round rawNextInterval))
+
+nextDifficulty :: Scheduler -> Difficulty -> Rating -> Double
+nextDifficulty conf difficulty rating =
+  let params = scParameters conf
+      dc = wDifficultyDeltaCoef params
+      mr = wDifficultyMeanReversion params
+      easyDifficulty = initialDifficulty params Easy
+      difficultyDelta = -(dc * (fromRating rating - 3))
+      dampedDifficulty = difficulty + (10 - difficulty) * difficultyDelta / 9
+      meanReversionDifficulty = mr * easyDifficulty + (1 - mr) * dampedDifficulty
+  in clampDifficulty meanReversionDifficulty
+
 cardRetrievability :: Scheduler -> Card -> Maybe NominalDiffTime -> Double
 cardRetrievability conf card mElapsedDays = case mElapsedDays of
   Nothing -> 0
   Just elapsedDays -> let decay = -(wRetrievabilityDecay $ scParameters conf)
-                      in (1 + decayFactor decay * realToFrac elapsedDays / cardStability card)
+                          roundedElapsed = fromIntegral (floor elapsedDays :: Int)
+                      in (1 + decayFactor decay * roundedElapsed / cardStability card) ** decay
 
 getFuzzedInterval :: Scheduler -> NominalDiffTime -> IO NominalDiffTime
 getFuzzedInterval conf interval = if interval / nominalDay < 2.5

@@ -9,30 +9,28 @@ data Rating = Again
             | Easy
               deriving (Show, Eq)
 
--- Diverging from py implementation slightly
--- I see no reason not to 0 index this
 fromRating :: Num a => Rating -> a
 fromRating rating = case rating of
-  Again -> 0
-  Hard  -> 1
-  Good  -> 2
-  Easy  -> 3
+  Again -> 1
+  Hard  -> 2
+  Good  -> 3
+  Easy  -> 4
 
 toRating :: (Num a, Eq a) => a -> Maybe Rating
 toRating v = case v of
-  0 -> Just Again
-  1 -> Just Hard
-  2 -> Just Good
-  3 -> Just Easy
+  1 -> Just Again
+  2 -> Just Hard
+  3 -> Just Good
+  4 -> Just Easy
   _ -> Nothing
 
 instance FromJSON Rating where
   parseJSON = withScientific "FSRS Review Rating" $ \v ->
     case v of
-      0 -> pure Again
-      1 -> pure Hard
-      2 -> pure Good
-      3 -> pure Easy
+      1 -> pure Again
+      2 -> pure Hard
+      3 -> pure Good
+      4 -> pure Easy
       _ -> fail $ "Invalid Review Rating value: " <> show v
 
 instance ToJSON Rating where

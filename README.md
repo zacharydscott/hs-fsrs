@@ -76,15 +76,14 @@ Fuzzing is available, as well as explicitly setting the review time, and more ex
 module Example where
 
 import FSRS
-import Data.Time (fromGregorian)
-import Data.Time.Clock (UTCTime(..))
+import Data.Time (fromGregorian, UTCTime(..))
 
 -- Note that reviewCardAtTime is not an IO function
 reviewCardCycle :: Int -> Card
 reviewCardCycle cid =
   let card = mkCard cid New
-      reviewDate = { utctDay = fromGregorian 1970 1 1, utctDayTime = 0}
-  in reviewCardAtTime defaultScheduler 0 card Hard reviewDate
+      let reviewTime = (fromGregorian 1970 1 1) 0
+  in reviewCardAtTime defaultScheduler 0 card Hard reviewTime
 
 main :: IO ()
 main = do
@@ -95,11 +94,39 @@ main = do
   (fuzzedCard, _) <- reviewCardFuzz 0 card Again
   putStrLn "fuzzed result: due date may change. Are yuo feeling lucky?"
   print fuzzedCard
-  let reviewDate = { utctDay = fromGregorian 1970 1 1, utctDayTime = 0}
+  let reviewTime = (fromGregorian 1970 1 1) 0
   -- The fuzzed "atTime" is though, as randomness requires IO
-  (fuzzedExplicitDateCard, _) <- reviewCardFuzzWithDate 0 card Again reviewDate
+  (fuzzedExplicitDateCard, _) <- reviewCardFuzzWithDate 0 card Again reviewTime
   putStrLn "fuzzed result: deep in the past either way"
   print fuzzedExplicitDateCard
+```
+
+Finally, alternative APIs are available in the `FSRS.Utils` module. `reviewCardFullOptions` allows both fuzzing
+and explicit dates to be dynamic. This is similar to other implementations scheduler classes.
+
+```Haskell
+module Example where
+
+import FSRS.Utils
+import Data.Time (fromGregorian, UTCTime(..))
+
+      let reviewTime = (fromGregorian 1970 1 1) 0
+main :: IO ()
+main = do
+  let reviewTime = (fromGregorian 1970 1 1) 0
+  card <- newCard
+  (fuzzAndDateCard, fuzzAndDateLog) <- reviewCardFullOptions
+    -- full arguments
+    defaultScheduler True 15 card Good (Just reviewTime)
+  putStrLn "fuzzed review with explicit date card and review log"
+  print fuzzAndDateCard
+  print fuzzAndDateLog
+  (noFuzzCurrentTimeCard, noFuzzCurrentTimeLog) <- reviewCardFullOptions
+    -- full arguments
+    defaultScheduler False 15 card Good Nothing
+  putStrLn "Non-fuzzed card with current time"
+  print noFuzzCurrentTimeCard
+  print noFuzzCurrentTimeLog
 ```
 
 ## Haskell Specifics

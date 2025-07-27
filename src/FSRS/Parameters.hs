@@ -1,9 +1,9 @@
 module FSRS.Parameters where
 
-import Data.Aeson (FromJSON, Value (Number), ToJSON (toJSON), withArray)
+import Data.Aeson (FromJSON, ToJSON (toJSON), withArray)
 import Data.Aeson.Types (FromJSON(parseJSON))
-import Data.Scientific (toRealFloat)
 import qualified Data.Vector as V
+import FSRS.Utils (parseDoubleFromJSON)
 
 stabilityMin :: Double
 stabilityMin = 0.002
@@ -32,13 +32,13 @@ data Parameters = Parameters
   , wRecallStabilityGrowthRate :: Double -- 8
   , wRecallStabilityDamper :: Double -- 9
   , wRecallStabilityRetievabilityCoef :: Double -- 10
-  , wRecallStabilityHardPenalty :: Double -- 15
-  , wRecallStabilityEasyBonus :: Double -- 16
 
   , wForgetStabilityLongTermBase :: Double -- 11
   , wForgetStabilityDifficultyExp :: Double -- 12
   , wForgetStabilityStabilityExp :: Double -- 13
   , wForgetStabilityRetrievabilityCoef :: Double -- 14
+  , wRecallStabilityHardPenalty :: Double -- 15
+  , wRecallStabilityEasyBonus :: Double -- 16
 
   , wShortTermStabilityExpCoef :: Double -- 17
   , wShortTermStabilityRatingNormalization :: Double -- 18
@@ -48,8 +48,38 @@ data Parameters = Parameters
 
 defaultParameters :: Parameters
 defaultParameters = Parameters
-  0.2172 1.1771 3.2602 16.1507 7.0114 0.57 2.0966 0.0069 1.5261 0.112 1.0178
-  1.849 0.1133 0.3127 2.2934 0.2191 3.0004 0.7536 0.3332 0.1437 0.2
+  { wInitialStabilityAgain = 0.2172 -- 0
+  , wInitialStabilityHard = 1.1771  -- 1
+  , wInitialStabilityGood = 3.2602  -- 2
+  , wInitialStabilityEasy = 16.1507  -- 3
+  , wInitialDifficultyBaseline = 7.0114  -- 4
+  , wInitialDifficultyRatingCoef = 0.57  -- 5
+  , wDifficultyDeltaCoef = 2.0966  -- 6
+  , wDifficultyMeanReversion = 0.0069  -- 7
+  , wRecallStabilityGrowthRate = 1.5261  -- 8
+  , wRecallStabilityDamper = 0.112  -- 9
+  , wRecallStabilityRetievabilityCoef = 1.0178 -- 10
+  , wForgetStabilityLongTermBase = 1.849  -- 11
+  , wForgetStabilityDifficultyExp = 0.1133  -- 12
+  , wForgetStabilityStabilityExp = 0.3127  -- 13
+  , wForgetStabilityRetrievabilityCoef = 2.2934  -- 14
+  , wRecallStabilityHardPenalty = 0.2191  -- 15
+  , wRecallStabilityEasyBonus = 3.0004  -- 16
+  , wShortTermStabilityExpCoef = 0.7536  -- 17
+  , wShortTermStabilityRatingNormalization = 0.3332  -- 18
+  , wShortTermStabilityStabilityExp = 0.1437  -- 19
+  , wRetrievabilityDecay = 0.2 -- 20
+  }
+
+listToParameters :: [Double] -> Either String Parameters
+listToParameters [w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15, w16, w17, w18, w19, w20] =
+  Right $ Parameters w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15 w16 w17 w18 w19 w20
+listToParameters weights =  Left $ "Expected 21 parameters, recieved " ++ show (length weights)
+
+parametersToList :: Parameters -> [Double]
+parametersToList
+  (Parameters w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15 w16 w17 w18 w19 w20) =
+  [w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15, w16, w17, w18, w19, w20]
 
 instance FromJSON Parameters where
   parseJSON = withArray "FSRS Parameters" $ \arr -> do
@@ -57,24 +87,10 @@ instance FromJSON Parameters where
     if length v /= 21
       then fail $ "Expected 21 parameters, got " <> show (length v)
       else do
-        let val = valFrom v
-        pure $ Parameters
-          (val 0)  (val 1)  (val 2)  (val 3)
-          (val 4)  (val 5)  (val 6)  (val 7)
-          (val 8)  (val 9)  (val 10)
-          (val 15) (val 16)
-          (val 11) (val 12) (val 13) (val 14)
-          (val 17) (val 18) (val 19) (val 20)
-      where valFrom v i = parseNumber (v !! i) i
-            parseNumber (Number n) _ = toRealFloat n
-            parseNumber _ i = error $ "Expected number at index " <> show i
+        let eitherParams = traverse parseDoubleFromJSON v >>= listToParameters
+        case eitherParams of
+          Right params -> pure params
+          Left err -> fail err
 
 instance ToJSON Parameters where
-  toJSON (Parameters a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a15 a16 a11 a12 a13 a14 a17 a18 a19 a20) =
-    toJSON
-      [ a0, a1, a2, a3, a4, a5
-      , a6, a7, a8, a9, a10
-      , a11, a12, a13, a14
-      , a15, a16
-      , a17, a18, a19, a20
-      ]
+  toJSON = toJSON . parametersToList

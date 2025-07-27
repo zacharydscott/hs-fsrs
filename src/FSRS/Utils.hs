@@ -2,14 +2,20 @@ module FSRS.Utils where
 
 import Data.Aeson (
   Options (fieldLabelModifier),
-  defaultOptions
+  defaultOptions, Value (..)
   )
 import Data.Char (toLower)
 import Data.Time (NominalDiffTime, nominalDay, UTCTime, fromGregorian)
 import Data.Time.Clock (UTCTime(..))
+import Data.Scientific (toRealFloat)
 
 blankDate :: UTCTime
 blankDate = UTCTime { utctDay = fromGregorian 1970 1 1, utctDayTime = 0 }
+
+parseDoubleFromJSON :: Value -> Either String Double
+parseDoubleFromJSON (Number n) = Right $ toRealFloat n
+parseDoubleFromJSON v = Left $ "Expected number, but recieved value " ++ show v
+
 
 genericParseOptionsWithPrefix :: String -> Options
 genericParseOptionsWithPrefix prefix =  defaultOptions { fieldLabelModifier = lowerFirst . drop (length prefix ) }

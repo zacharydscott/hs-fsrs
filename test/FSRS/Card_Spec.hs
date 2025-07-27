@@ -10,18 +10,18 @@ import Test.Hspec
 import FSRS.Card
 import Data.Either (isLeft)
 
-exampleTime1 :: Maybe UTCTime
-exampleTime1 = Just $ UTCTime (fromGregorian 1970 1 1) (secondsToDiffTime 0)
+exampleTime1 :: UTCTime
+exampleTime1 = UTCTime (fromGregorian 1970 1 1) (secondsToDiffTime 0)
 
 exampleTime2 :: UTCTime
 exampleTime2 = UTCTime (fromGregorian 1970 1 2) (secondsToDiffTime 0)
 
-testCard :: Card
-testCard = Card
+testReveiwingCard :: Card
+testReveiwingCard = Card
   { cardId = 11
-  , cardState = New
+  , cardState = Reviewing
   , cardDue = exampleTime2
-  , cardLastReview = exampleTime1
+  , cardLastReview = Just exampleTime1
   , cardLapses = 1
   , cardStep = 2
   , cardRepetitions = 3
@@ -29,17 +29,43 @@ testCard = Card
   , cardDifficulty = 0.6
   }
 
-expectedObject :: Value
-expectedObject = object
+expectedReviewingCardJSONObject :: Value
+expectedReviewingCardJSONObject = object
   [ "id" .= Number 11
-  , "state" .= Number 0
+  , "state" .= Number 2
   , "due" .= iso8601Show exampleTime2
-  , "lastReview" .= maybe "" iso8601Show exampleTime1
+  , "lastReview" .= iso8601Show exampleTime1
   , "lapses" .= Number 1
   , "step" .= Number 2
   , "repetitions" .= Number 3
   , "stability" .= Number 0.5
   , "difficulty" .= Number 0.6
+  ]
+
+testNewCard :: Card
+testNewCard = Card
+  { cardId = 22
+  , cardState = New
+  , cardDue = exampleTime1
+  , cardLastReview = Nothing
+  , cardLapses = 0
+  , cardStep = 0
+  , cardRepetitions = 0
+  , cardStability = 0.0
+  , cardDifficulty = 0.0
+  }
+
+expectedNewCardJSONObject :: Value
+expectedNewCardJSONObject = object
+  [ "id"          .= Number 22
+  , "state"       .= Number 0
+  , "due"         .= iso8601Show exampleTime1
+  , "lastReview"  .= Null
+  , "step"        .= Number 0
+  , "lapses"      .= Number 0
+  , "repetitions" .= Number 0
+  , "stability"   .= Number 0
+  , "difficulty"  .= Number 0
   ]
 
 spec :: Spec
@@ -59,19 +85,25 @@ spec = do
       (eitherDecode "-1" :: Either String CardState) `shouldSatisfy` isLeft
 
   describe "FSRS Card" $ do
-    it "should serialize Card data to JSON correctly" $ do
-      toJSON testCard `shouldBe` expectedObject
-      fromJSON expectedObject `shouldBe` Success testCard
-    it "Should be the same after serializing and deserializing" $ do
-      let encodedTestCard = encode testCard
-      eitherDecode encodedTestCard `shouldBe` Right testCard
+    it "should serialize/deserialize Card data to JSON correctly when last review exists" $ do
+      toJSON testReveiwingCard `shouldBe` expectedReviewingCardJSONObject
+      fromJSON expectedReviewingCardJSONObject `shouldBe` Success testReveiwingCard
+    it "Should be the same after serializing and deserializing when last review exists" $ do
+      let encodedTestReveiwingCard = encode testReveiwingCard
+      eitherDecode encodedTestReveiwingCard `shouldBe` Right testReveiwingCard
+    it "should serialize/deserialize Card data to JSON correctly when last review doesn't exists" $ do
+      toJSON testNewCard `shouldBe` expectedNewCardJSONObject
+      fromJSON expectedNewCardJSONObject `shouldBe` Success testNewCard
+    it "Should be the same after serializing and deserializing when last review doesn't exists" $ do
+      let encodedTestNewCard = encode testNewCard
+      eitherDecode encodedTestNewCard `shouldBe` Right testNewCard
     it "should fail to parse a JSON with wrong field types" $ do
       -- put a string where a number is expected
       let bad2 = object
             [ "id"        .= String "eleven"
             , "state"     .= Number 0
             , "due"       .= iso8601Show exampleTime2
-            , "lastReview".= maybe "" iso8601Show exampleTime1
+            , "lastReview".= iso8601Show exampleTime1
             , "lapses"    .= Number 1
             , "step"      .= Number 2
             , "repetitions".= Number 3
