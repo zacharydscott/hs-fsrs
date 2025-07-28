@@ -19,11 +19,11 @@ expectedDefaultParametersJSONString =
 spec :: Spec
 spec = do
   describe "FSRS Parameters" $ do
-    it "Should be the same value going to and from JSON" $ do
+    it "be the same value going to and from JSON" $ do
       Success defaultParameters `shouldBe` fromJSON (toJSON defaultParameters)
-    it "Should have the expected JSON string form and parameter values" $ do
+    it "have the expected JSON string form and parameter values" $ do
       encode defaultParameters `shouldBe` expectedDefaultParametersJSONString
-    it "Should deserialize with the correct argument order from a json string" $ do 
+    it "deserialize with the correct argument order from a json string" $ do 
       eitherDecode expectedDefaultParametersJSONString `shouldBe` Right defaultParameters
     it "fails to decode when the JSON array has the wrong length" $ do
          let tooShort = "[1,2,3]"

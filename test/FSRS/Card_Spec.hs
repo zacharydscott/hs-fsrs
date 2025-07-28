@@ -71,33 +71,33 @@ expectedNewCardJSONObject = object
 spec :: Spec
 spec = do
   describe "FSRS Card State" $ do
-    it "should serialize each CardState to the correct number in JSON" $ do
+    it "serialize each CardState to the correct number in JSON" $ do
       toJSON New `shouldBe` Number 0
       toJSON Learning `shouldBe` Number 1
       toJSON Reviewing `shouldBe` Number 2
       toJSON Relearning `shouldBe` Number 3
-    it "should deserialize numbers from JSON to the correct CardStat" $ do
+    it "deserialize numbers from JSON to the correct CardStat" $ do
       eitherDecode "0" `shouldBe` Right New
       eitherDecode "1" `shouldBe` Right Learning
       eitherDecode "2" `shouldBe` Right Reviewing
-    it "should fail to deserialize out‑of‑range numbers" $ do
+    it "fail to deserialize out‑of‑range numbers" $ do
       (eitherDecode "4" :: Either String CardState) `shouldSatisfy` isLeft
       (eitherDecode "-1" :: Either String CardState) `shouldSatisfy` isLeft
 
   describe "FSRS Card" $ do
-    it "should serialize/deserialize Card data to JSON correctly when last review exists" $ do
+    it "serialize/deserialize Card data to JSON correctly when last review exists" $ do
       toJSON testReveiwingCard `shouldBe` expectedReviewingCardJSONObject
       fromJSON expectedReviewingCardJSONObject `shouldBe` Success testReveiwingCard
-    it "Should be the same after serializing and deserializing when last review exists" $ do
+    it "be the same after serializing and deserializing when last review exists" $ do
       let encodedTestReveiwingCard = encode testReveiwingCard
       eitherDecode encodedTestReveiwingCard `shouldBe` Right testReveiwingCard
-    it "should serialize/deserialize Card data to JSON correctly when last review doesn't exists" $ do
+    it "serialize/deserialize Card data to JSON correctly when last review doesn't exists" $ do
       toJSON testNewCard `shouldBe` expectedNewCardJSONObject
       fromJSON expectedNewCardJSONObject `shouldBe` Success testNewCard
-    it "Should be the same after serializing and deserializing when last review doesn't exists" $ do
+    it "be the same after serializing and deserializing when last review doesn't exists" $ do
       let encodedTestNewCard = encode testNewCard
       eitherDecode encodedTestNewCard `shouldBe` Right testNewCard
-    it "should fail to parse a JSON with wrong field types" $ do
+    it "fail to parse a JSON with wrong field types" $ do
       -- put a string where a number is expected
       let bad2 = object
             [ "id"        .= String "eleven"

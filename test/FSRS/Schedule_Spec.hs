@@ -1,6 +1,6 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use lambda-case" #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module FSRS.Schedule_Spec (spec) where
 
@@ -17,7 +17,7 @@ import FSRS.ReviewLog
 spec :: Spec
 spec = do
   describe "FSRS Scheduler JSON serialization" $ do
-    it "should serialize/deserialize to JSON correctly when last review exists" $ do
+    it "serialize/deserialize to JSON correctly when last review exists" $ do
       let parameters = Parameters 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20
       let scheduler = Scheduler parameters 0.8 [60, 120] [100] 50
           schedulerExpectedJSON = object
@@ -41,7 +41,7 @@ spec = do
             , "relearningSteps"  .= [30 :: Int]
             , "maximumInterval"  .= (10 :: Int)
             ]
-      (fromJSON badScheduleJSON :: Result Scheduler) `shouldSatisfy` \r -> case r of
+      (fromJSON badScheduleJSON :: Result Scheduler) `shouldSatisfy` \case
             Error _ -> True
             Success _ -> False
   describe "FSRS Scheduler reviews (hard coded values compared to Python implementation output)" $ do
@@ -51,116 +51,176 @@ spec = do
           reviewTime = UTCTime (fromGregorian 2022 11 29) 0
           review = reviewCardAtTime defaultScheduler 0
 
-      it "should update new cards reviewed with again" $ do
-        let (newCardAgain, newAgLogain) = review newCard' Again reviewTime
-        newCardAgain `shouldBe` Card 
-          { cardId = 1
-          , cardState = Learning
-          , cardDue = UTCTime (fromGregorian 2022 11 29) (1*60)
-          , cardLastReview = Just reviewTime
-          , cardStep = 0
-          , cardLapses = 0
+      it "updates new cards reviewed with again" $ do
+        let (reviewedCard, reviewLog) = review newCard' Again reviewTime
+        reviewedCard `shouldBe` Card 
+          { cardId          = 1
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 29) (1*60)
+          , cardLastReview  = Just reviewTime
+          , cardStep        = 0
+          , cardLapses      = 0
           , cardRepetitions = 1
-          , cardStability = 0.2172
-          , cardDifficulty = 7.0114
+          , cardStability   = 0.2172
+          , cardDifficulty  = 7.0114
           }
-        newAgLogain `shouldBe` ReviewLog 1 Again reviewTime 0
+        reviewLog `shouldBe` ReviewLog 1 Again reviewTime 0
 
-      it "should update new cards reviewed with Hard" $ do
-        let (newCardHard, newLogHard) = review newCard' Hard reviewTime
-        newCardHard `shouldBe` Card 
-          { cardId = 1
-          , cardState = Learning
-          , cardDue = UTCTime (fromGregorian 2022 11 29) (5*60 + 30)
-          , cardLastReview = Just reviewTime
-          , cardStep = 0
-          , cardLapses = 0
+      it "updates new cards reviewed with Hard" $ do
+        let (reviewedCard, reviewLog) = review newCard' Hard reviewTime
+        reviewedCard `shouldBe` Card 
+          { cardId          = 1
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 29) (5*60 + 30)
+          , cardLastReview  = Just reviewTime
+          , cardStep        = 0
+          , cardLapses      = 0
           , cardRepetitions = 1
-          , cardStability = 1.1771
-          , cardDifficulty = 6.243132948566265
+          , cardStability   = 1.1771
+          , cardDifficulty  = 6.243132948566265
           }
-        newLogHard `shouldBe` ReviewLog 1 Hard reviewTime 0
+        reviewLog `shouldBe` ReviewLog 1 Hard reviewTime 0
 
-      it "should update new cards reviewed with Good" $ do
-        let (newCardGood, newLogGood) = review newCard' Good reviewTime
-        newCardGood `shouldBe` Card 
-          { cardId = 1
-          , cardState = Learning
-          , cardDue = UTCTime (fromGregorian 2022 11 29) (10*60)
-          , cardLastReview = Just reviewTime
-          , cardStep = 1
-          , cardLapses = 0
+      it "updates new cards reviewed with Good" $ do
+        let (reviewedCard, reviewLog) = review newCard' Good reviewTime
+        reviewedCard `shouldBe` Card 
+          { cardId          = 1
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 29) (10*60)
+          , cardLastReview  = Just reviewTime
+          , cardStep        = 1
+          , cardLapses      = 0
           , cardRepetitions = 1
-          , cardStability = 3.2602
-          , cardDifficulty = 4.884631634813845
+          , cardStability   = 3.2602
+          , cardDifficulty  = 4.884631634813845
           }
-        newLogGood `shouldBe` ReviewLog 1 Good reviewTime 0
+        reviewLog `shouldBe` ReviewLog 1 Good reviewTime 0
 
-      it "should update new cards reviewed with Easy" $ do
-        let (newCardEasy, newLogEasy) = review newCard' Easy reviewTime
-        newCardEasy `shouldBe` Card 
-          { cardId = 1
-          , cardState = Reviewing
-          , cardDue = UTCTime (fromGregorian 2022 12 15) 0
-          , cardLastReview = Just reviewTime
-          , cardStep = 0
-          , cardLapses = 0
+      it "updates new cards reviewed with Easy" $ do
+        let (reviewedCard, reviewLog) = review newCard' Easy reviewTime
+        reviewedCard `shouldBe` Card 
+          { cardId          = 1
+          , cardState       = Reviewing
+          , cardDue         = UTCTime (fromGregorian 2022 12 15) 0
+          , cardLastReview  = Just reviewTime
+          , cardStep        = 0
+          , cardLapses      = 0
           , cardRepetitions = 1
-          , cardStability = 16.1507
-          , cardDifficulty = 2.482438522375996
+          , cardStability   = 16.1507
+          , cardDifficulty  = 2.482438522375996
           }
-        newLogEasy `shouldBe` ReviewLog 1 Easy reviewTime 0
+        reviewLog `shouldBe` ReviewLog 1 Easy reviewTime 0
 
     describe "Learning Card Updates" $ do
       let reviewTime = UTCTime (fromGregorian 2022 11 29) (10*60)
           reviewtimePlus1day = UTCTime (fromGregorian 2022 11 30) (10*60)
           reviewTimeMinus5min = UTCTime (fromGregorian 2022 11 29) (5*60)
           learningCard = Card
-            { cardId = 2
-            , cardState = Learning
-            , cardDue = reviewTime
-            , cardLastReview = Just $ UTCTime (fromGregorian 2022 11 29) 0
-            , cardStep = 1
-            , cardLapses = 0
+            { cardId          = 2
+            , cardState       = Learning
+            , cardDue         = reviewTime
+            , cardLastReview  = Just $ UTCTime (fromGregorian 2022 11 29) 0
+            , cardStep        = 1
+            , cardLapses      = 0
             , cardRepetitions = 1
-            , cardStability = 3.2602
-            , cardDifficulty = 4.884631634813845
+            , cardStability   = 3.2602
+            , cardDifficulty  = 4.884631634813845
             }
           review = reviewCardAtTime defaultScheduler 0
 
-      it "should update new cards reviewed with again" $ do
-        let (learningCardAgain, learningLogAgain) = review learningCard Again reviewTime
-        learningCardAgain `shouldBe` Card 
-          { cardId = 2
-          , cardState = Learning
-          , cardDue = UTCTime (fromGregorian 2022 11 29) (11*60)
-          , cardLastReview = Just reviewTime
-          , cardStep = 0
-          , cardLapses = 0
+      it "updates learning cards reviewed with again" $ do
+        let (reviewedCard, reviewLog) = review learningCard Again reviewTime
+        reviewedCard `shouldBe` Card 
+          { cardId          = 2
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 29) (11*60)
+          , cardLastReview  = Just reviewTime
+          , cardStep        = 0
+          , cardLapses      = 0
           , cardRepetitions = 2
-          , cardStability = 0.7833819093752047
-          , cardDifficulty = 7.234918643089044
+          , cardStability   = 0.7833819093752047
+          , cardDifficulty  = 7.234918643089044
           }
-        learningLogAgain `shouldBe` ReviewLog 2 Again reviewTime 0
+        reviewLog `shouldBe` ReviewLog 2 Again reviewTime 0
 
-      it "should update new cards reviewed with Hard" $ do
-        let (learningCardHard, learningLogHard) = review learningCard Hard reviewTime
-        learningCardHard `shouldBe` Card 
-          { cardId = 2
-          , cardState = Learning
-          , cardDue = UTCTime (fromGregorian 2022 11 29) (20*60)
-          , cardLastReview = Just reviewTime
-          , cardStep = 1
-          , cardLapses = 0
+      it "updates learning cards reviewed with Again, 5 minutes before due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Again reviewTimeMinus5min
+        reviewedCard `shouldBe` Card
+          { cardId          = 2
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 29) (6*60)
+          , cardLastReview  = Just reviewTimeMinus5min
+          , cardStep        = 0
+          , cardLapses      = 0
           , cardRepetitions = 2
-          , cardStability = 1.6644005848819015
-          , cardDifficulty = 6.051487572713533
+          , cardStability   = 0.7833819093752047
+          , cardDifficulty  = 7.234918643089044
           }
-        learningLogHard `shouldBe` ReviewLog 2 Hard reviewTime 0
+        reviewLog `shouldBe` ReviewLog 2 Again reviewTimeMinus5min 0
 
-      it "should update learning cards reviewed with Good" $ do
-        let (learningCardGood, learningLogGood) = review learningCard Good reviewTime
-        learningCardGood `shouldBe` Card
+      it "updates learning cards reviewed with Again, 1 day after due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Again reviewtimePlus1day
+        reviewedCard `shouldBe` Card
+          { cardId          = 2
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 30) (11*60)
+          , cardLastReview  = Just reviewtimePlus1day
+          , cardStep        = 0
+          , cardLapses      = 0
+          , cardRepetitions = 2
+          , cardStability   = 0.9660345980586499
+          , cardDifficulty  = 7.234918643089044
+          }
+        reviewLog `shouldBe` ReviewLog 2 Again reviewtimePlus1day 0
+
+      it "updates learning cards reviewed with Hard" $ do
+        let (reviewedCard, reviewLog) = review learningCard Hard reviewTime
+        reviewedCard `shouldBe` Card 
+          { cardId          = 2
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 29) (20*60)
+          , cardLastReview  = Just reviewTime
+          , cardStep        = 1
+          , cardLapses      = 0
+          , cardRepetitions = 2
+          , cardStability   = 1.6644005848819015
+          , cardDifficulty  = 6.051487572713533
+          }
+        reviewLog `shouldBe` ReviewLog 2 Hard reviewTime 0
+
+      it "updates learning cards reviewed with Hard, 5 minutes before due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Hard reviewTimeMinus5min
+        reviewedCard `shouldBe` Card
+          { cardId          = 2
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 29) (15*60)
+          , cardLastReview  = Just reviewTimeMinus5min
+          , cardStep        = 1
+          , cardLapses      = 0
+          , cardRepetitions = 2
+          , cardStability   = 1.6644005848819015
+          , cardDifficulty  = 6.051487572713533
+          }
+        reviewLog `shouldBe` ReviewLog 2 Hard reviewTimeMinus5min 0
+
+      it "updates learning cards reviewed with Hard, 1 day after due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Hard reviewtimePlus1day
+        reviewedCard `shouldBe` Card
+          { cardId          = 2
+          , cardState       = Learning
+          , cardDue         = UTCTime (fromGregorian 2022 11 30) (20*60)
+          , cardLastReview  = Just reviewtimePlus1day
+          , cardStep        = 1
+          , cardLapses      = 0
+          , cardRepetitions = 2
+          , cardStability   = 3.951378589733609
+          , cardDifficulty  = 6.051487572713533
+          }
+        reviewLog `shouldBe` ReviewLog 2 Hard reviewtimePlus1day 0
+
+      it "updates learning cards reviewed with Good" $ do
+        let (reviewedCard, reviewLog) = review learningCard Good reviewTime
+        reviewedCard `shouldBe` Card
           { cardId          = 2
           , cardState       = Reviewing
           , cardDue         = UTCTime (fromGregorian 2022 12 3) (10*60)
@@ -171,11 +231,41 @@ spec = do
           , cardStability   = 3.536243655619573
           , cardDifficulty  = 4.868056502338024
           }
-        learningLogGood `shouldBe` ReviewLog 2 Good reviewTime 0
+        reviewLog `shouldBe` ReviewLog 2 Good reviewTime 0
 
-      it "should update learning cards reviewed with Easy" $ do
-        let (learningCardEasy, learningLogEasy) = review learningCard Easy reviewTime
-        learningCardEasy `shouldBe` Card
+      it "updates learning cards reviewed with Good, 5 minutes before due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Good reviewTimeMinus5min
+        reviewedCard `shouldBe` Card
+          { cardId          = 2
+          , cardState       = Reviewing
+          , cardDue         = UTCTime (fromGregorian 2022 12 3) (5*60)
+          , cardLastReview  = Just reviewTimeMinus5min
+          , cardStep        = 0
+          , cardLapses      = 0
+          , cardRepetitions = 2
+          , cardStability   = 3.536243655619573
+          , cardDifficulty  = 4.868056502338024
+          }
+        reviewLog `shouldBe` ReviewLog 2 Good reviewTimeMinus5min 0
+
+      it "updates learning cards reviewed with Good, 1 day after due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Good reviewtimePlus1day
+        reviewedCard `shouldBe` Card
+          { cardId          = 2
+          , cardState       = Reviewing
+          , cardDue         = UTCTime (fromGregorian 2022 12 6) (10*60)
+          , cardLastReview  = Just reviewtimePlus1day
+          , cardStep        = 0
+          , cardLapses      = 0
+          , cardRepetitions = 2
+          , cardStability   = 6.4148261512259666
+          , cardDifficulty  = 4.868056502338024
+          }
+        reviewLog `shouldBe` ReviewLog 2 Good reviewtimePlus1day 0
+
+      it "updates learning cards reviewed with Easy" $ do
+        let (reviewedCard, reviewLog) = review learningCard Easy reviewTime
+        reviewedCard `shouldBe` Card
           { cardId          = 2
           , cardState       = Reviewing
           , cardDue         = UTCTime (fromGregorian 2022 12 7) (10*60)
@@ -186,11 +276,11 @@ spec = do
           , cardStability   = 7.513226867074781
           , cardDifficulty  = 3.6846254319625134
           }
-        learningLogEasy `shouldBe` ReviewLog 2 Easy reviewTime 0
+        reviewLog `shouldBe` ReviewLog 2 Easy reviewTime 0
 
-      it "should update learning cards reviewed with Easy, 5 minutes before due" $ do
-        let (learningCardEasy, learningLogEasy) = review learningCard Easy reviewTimeMinus5min
-        learningCardEasy `shouldBe` Card
+      it "updates learning cards reviewed with Easy, 5 minutes before due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Easy reviewTimeMinus5min
+        reviewedCard `shouldBe` Card
           { cardId          = 2
           , cardState       = Reviewing
           , cardDue         = UTCTime (fromGregorian 2022 12 7) (5*60)
@@ -201,11 +291,11 @@ spec = do
           , cardStability   = 7.513226867074781
           , cardDifficulty  = 3.6846254319625134
           }
-        learningLogEasy `shouldBe` ReviewLog 2 Easy reviewTimeMinus5min 0
+        reviewLog `shouldBe` ReviewLog 2 Easy reviewTimeMinus5min 0
 
-      it "should update learning cards reviewed with Easy, 1 day after due" $ do
-        let (learningCardEasy, learningLogEasy) = review learningCard Easy reviewtimePlus1day
-        learningCardEasy `shouldBe` Card
+      it "updates learning cards reviewed with Easy, 1 day after due" $ do
+        let (reviewedCard, reviewLog) = review learningCard Easy reviewtimePlus1day
+        reviewedCard `shouldBe` Card
           { cardId          = 2
           , cardState       = Reviewing
           , cardDue         = UTCTime (fromGregorian 2022 12 13) (10*60)
@@ -216,7 +306,7 @@ spec = do
           , cardStability   = 12.72534030413839
           , cardDifficulty  = 3.6846254319625134
           }
-        learningLogEasy `shouldBe` ReviewLog 2 Easy reviewtimePlus1day 0
+        reviewLog `shouldBe` ReviewLog 2 Easy reviewtimePlus1day 0
 
   describe "Reviewing Card Updates" $ do
     let reviewTime      = UTCTime (fromGregorian 2022 12 7) (10*60)
@@ -233,9 +323,9 @@ spec = do
           }
         review = reviewCardAtTime defaultScheduler 0
 
-    it "should update reviewing cards reviewed with Again" $ do
-      let (reviewingCardAgain, reviewingLogAgain) = review reviewingCard Again reviewTime
-      reviewingCardAgain `shouldBe` Card
+    it "updates reviewing cards reviewed with Again" $ do
+      let (reviewedCard, reviewLog) = review reviewingCard Again reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Relearning
         , cardDue         = UTCTime (fromGregorian 2022 12  7) (20*60)
@@ -246,11 +336,11 @@ spec = do
         , cardStability   = 1.9338559181758825
         , cardDifficulty  = 6.598430942407233
         }
-      reviewingLogAgain `shouldBe` ReviewLog 2 Again reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Again reviewTime 0
 
-    it "should update reviewing cards reviewed with Hard" $ do
-      let (reviewingCardHard, reviewingLogHard) = review reviewingCard Hard reviewTime
-      reviewingCardHard `shouldBe` Card
+    it "updates reviewing cards reviewed with Hard" $ do
+      let (reviewedCard, reviewLog) = review reviewingCard Hard reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Reviewing
         , cardDue         = UTCTime (fromGregorian 2022 12 19) (10*60)
@@ -261,11 +351,11 @@ spec = do
         , cardStability   = 12.48314473820678
         , cardDifficulty  = 5.137380642346799
         }
-      reviewingLogHard `shouldBe` ReviewLog 2 Hard reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Hard reviewTime 0
 
-    it "should update reviewing cards reviewed with Good" $ do
-      let (reviewingCardGood, reviewingLogGood) = review reviewingCard Good reviewTime
-      reviewingCardGood `shouldBe` Card
+    it "updates reviewing cards reviewed with Good" $ do
+      let (reviewedCard, reviewLog) = review reviewingCard Good reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Reviewing
         , cardDue         = UTCTime (fromGregorian 2023 1 6) (10*60)
@@ -276,11 +366,11 @@ spec = do
         , cardStability   = 30.19655809086301
         , cardDifficulty  = 3.676330342286366
         }
-      reviewingLogGood `shouldBe` ReviewLog 2 Good reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Good reviewTime 0
 
-    it "should update reviewing cards reviewed with Easy" $ do
-      let (reviewingCardEasy, reviewingLogEasy) = review reviewingCard Easy reviewTime
-      reviewingCardEasy `shouldBe` Card
+    it "updates reviewing cards reviewed with Easy" $ do
+      let (reviewedCard, reviewLog) = review reviewingCard Easy reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Reviewing
         , cardDue         = UTCTime (fromGregorian 2023 2 21) (10*60)
@@ -291,7 +381,7 @@ spec = do
         , cardStability   = 75.57229387092897
         , cardDifficulty  = 2.2152800422259333
         }
-      reviewingLogEasy `shouldBe` ReviewLog 2 Easy reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Easy reviewTime 0
 
   describe "Relearning Card Updates" $ do
     let reviewTime      = UTCTime (fromGregorian 2022 12  7) (20*60)
@@ -308,9 +398,9 @@ spec = do
           }
         review = reviewCardAtTime defaultScheduler 0
 
-    it "should update reviewing cards reviewed with Again" $ do
-      let (relearningCardAgain, relearningLogAgain) = review relearningCard Again reviewTime
-      relearningCardAgain `shouldBe` Card
+    it "updates reviewing cards reviewed with Again" $ do
+      let (reviewedCard, reviewLog) = review relearningCard Again reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Relearning
         , cardDue         = UTCTime (fromGregorian 2022 12  7) (30*60)
@@ -321,11 +411,11 @@ spec = do
         , cardStability   = 0.500895882313634
         , cardDifficulty  = 8.143924095001145
         }
-      relearningLogAgain `shouldBe` ReviewLog 2 Again reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Again reviewTime 0
 
-    it "should update reviewing cards reviewed with Hard" $ do
-      let (relearningCardHard, relearningLogHard) = review relearningCard Hard reviewTime
-      relearningCardHard `shouldBe` Card
+    it "updates reviewing cards reviewed with Hard" $ do
+      let (reviewedCard, reviewLog) = review relearningCard Hard reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Relearning
         , cardDue         = UTCTime (fromGregorian 2022 12 7) (35*60)
@@ -336,11 +426,11 @@ spec = do
         , cardStability   = 1.0642208985304098
         , cardDifficulty  = 7.35697734485508
         }
-      relearningLogHard `shouldBe` ReviewLog 2 Hard reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Hard reviewTime 0
 
-    it "should update reviewing cards reviewed with Good" $ do
-      let (relearningCardGood, relearningLogGood) = review relearningCard Good reviewTime
-      relearningCardGood `shouldBe` Card
+    it "updates reviewing cards reviewed with Good" $ do
+      let (reviewedCard, reviewLog) = review relearningCard Good reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Reviewing
         , cardDue         = UTCTime (fromGregorian 2022 12 9) (20*60)
@@ -351,11 +441,11 @@ spec = do
         , cardStability   = 2.2610809169313972
         , cardDifficulty  = 6.570030594709017
         }
-      relearningLogGood `shouldBe` ReviewLog 2 Good reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Good reviewTime 0
 
-    it "should update reviewing cards reviewed with Easy" $ do
-      let (relearningCardEasy, relearningLogEasy) = review relearningCard Easy reviewTime
-      relearningCardEasy `shouldBe` Card
+    it "updates reviewing cards reviewed with Easy" $ do
+      let (reviewedCard, reviewLog) = review relearningCard Easy reviewTime
+      reviewedCard `shouldBe` Card
         { cardId          = 2
         , cardState       = Reviewing
         , cardDue         = UTCTime (fromGregorian 2022 12 12) (20*60)
@@ -366,4 +456,4 @@ spec = do
         , cardStability   = 4.803971543850715
         , cardDifficulty  = 5.783083844562954
         }
-      relearningLogEasy `shouldBe` ReviewLog 2 Easy reviewTime 0
+      reviewLog `shouldBe` ReviewLog 2 Easy reviewTime 0
