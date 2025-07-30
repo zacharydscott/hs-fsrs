@@ -24,10 +24,10 @@ spec = do
             [ "parameters" .= [ Number 0, Number 1, Number 2, Number 3, Number 4, Number 5, Number 6,
               Number 7, Number 8, Number 9, Number 10, Number 11, Number 12, Number 13, Number 14,
               Number 15, Number 16, Number 17, Number 18, Number 19, Number 20]
-            , "desiredRetention" .= Number 0.8
-            , "learningSteps" .= [Number 60, Number 120]
-            , "relearningSteps" .= [Number 100]
-            , "maximumInterval" .= Number 50
+            , "desired_retention" .= Number 0.8
+            , "learning_steps" .= [Number 60, Number 120]
+            , "relearning_steps" .= [Number 100]
+            , "maximum_interval" .= Number 50
             ]
       toJSON scheduler `shouldBe` schedulerExpectedJSON
       fromJSON schedulerExpectedJSON `shouldBe` Success scheduler
@@ -36,10 +36,10 @@ spec = do
     it "fails to deserialize if `parameters` list has wrong length" $ do
       let badScheduleJSON = object
             [ "parameters"       .= [Number 0, Number 1, Number 2]  -- too short
-            , "desiredRetention" .= (0.5 :: Double)
-            , "learningSteps"    .= [60 :: Int]
-            , "relearningSteps"  .= [30 :: Int]
-            , "maximumInterval"  .= (10 :: Int)
+            , "desired_retention" .= (0.5 :: Double)
+            , "learning_steps"    .= [60 :: Int]
+            , "relearning_steps"  .= [30 :: Int]
+            , "maximum_interval"  .= (10 :: Int)
             ]
       (fromJSON badScheduleJSON :: Result Scheduler) `shouldSatisfy` \case
             Error _ -> True

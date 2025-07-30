@@ -2,7 +2,7 @@ module FSRS.Utils where
 
 import Data.Aeson (
   Options (fieldLabelModifier),
-  defaultOptions, Value (..)
+  defaultOptions, Value (..), camelTo2
   )
 import Data.Char (toLower)
 import Data.Time (NominalDiffTime, nominalDay, UTCTime, fromGregorian)
@@ -18,11 +18,14 @@ parseDoubleFromJSON v = Left $ "Expected number, but recieved value " ++ show v
 
 
 genericParseOptionsWithPrefix :: String -> Options
-genericParseOptionsWithPrefix prefix =  defaultOptions { fieldLabelModifier = lowerFirst . drop (length prefix ) }
+genericParseOptionsWithPrefix prefix =  defaultOptions { fieldLabelModifier = snakeCase . lowerFirst . drop (length prefix ) }
 
 lowerFirst :: String -> String
 lowerFirst "" = ""
 lowerFirst (c:cs) = toLower c : cs
+
+snakeCase :: String -> String
+snakeCase = camelTo2 '_'
 
 -- | 1st min val, 2nd max val, 3rd value to bound
 bound :: Ord a => a -> a -> a -> a

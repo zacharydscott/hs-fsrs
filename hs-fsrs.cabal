@@ -45,6 +45,7 @@ test-suite hs-fsrs-test
                    , FSRS.Parameters_Spec
                    , FSRS.Rating_Spec
                    , FSRS.Schedule_Spec
+                   , FSRS.Schedule_QuickCheck_Spec
     -- other-extensions:
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
@@ -56,4 +57,6 @@ test-suite hs-fsrs-test
                   , hspec
                   , time
                   , aeson
+                  , QuickCheck
+                  , process
 

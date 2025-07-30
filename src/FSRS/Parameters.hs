@@ -6,7 +6,7 @@ import qualified Data.Vector as V
 import FSRS.Utils (parseDoubleFromJSON)
 
 stabilityMin :: Double
-stabilityMin = 0.002
+stabilityMin = 0.001
 
 difficultyMin :: Double
 difficultyMin = 1.00

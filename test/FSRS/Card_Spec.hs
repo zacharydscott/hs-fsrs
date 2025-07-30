@@ -31,15 +31,15 @@ testReveiwingCard = Card
 
 expectedReviewingCardJSONObject :: Value
 expectedReviewingCardJSONObject = object
-  [ "id" .= Number 11
-  , "state" .= Number 2
-  , "due" .= iso8601Show exampleTime2
-  , "lastReview" .= iso8601Show exampleTime1
-  , "lapses" .= Number 1
-  , "step" .= Number 2
+  [ "card_id"     .= Number 11
+  , "state"       .= Number 2
+  , "due"         .= iso8601Show exampleTime2
+  , "last_review" .= iso8601Show exampleTime1
+  , "lapses"      .= Number 1
+  , "step"        .= Number 2
   , "repetitions" .= Number 3
-  , "stability" .= Number 0.5
-  , "difficulty" .= Number 0.6
+  , "stability"   .= Number 0.5
+  , "difficulty"  .= Number 0.6
   ]
 
 testNewCard :: Card
@@ -57,10 +57,10 @@ testNewCard = Card
 
 expectedNewCardJSONObject :: Value
 expectedNewCardJSONObject = object
-  [ "id"          .= Number 22
+  [ "card_id"     .= Number 22
   , "state"       .= Number 0
   , "due"         .= iso8601Show exampleTime1
-  , "lastReview"  .= Null
+  , "last_review" .= Null
   , "step"        .= Number 0
   , "lapses"      .= Number 0
   , "repetitions" .= Number 0
@@ -100,15 +100,15 @@ spec = do
     it "fail to parse a JSON with wrong field types" $ do
       -- put a string where a number is expected
       let bad2 = object
-            [ "id"        .= String "eleven"
-            , "state"     .= Number 0
-            , "due"       .= iso8601Show exampleTime2
-            , "lastReview".= iso8601Show exampleTime1
-            , "lapses"    .= Number 1
-            , "step"      .= Number 2
-            , "repetitions".= Number 3
-            , "stability" .= Number 0.5
-            , "difficulty".= Number 0.6
+            [ "card_id"     .= String "eleven"
+            , "state"       .= Number 0
+            , "due"         .= iso8601Show exampleTime2
+            , "last_review" .= iso8601Show exampleTime1
+            , "lapses"      .= Number 1
+            , "step"        .= Number 2
+            , "repetitions" .= Number 3
+            , "stability"   .= Number 0.5
+            , "difficulty"  .= Number 0.6
             ]
       case (fromJSON bad2 :: Result Card) of
         Error _ -> pure ()
