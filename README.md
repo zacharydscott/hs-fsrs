@@ -61,10 +61,14 @@ review = fst <$> reviewCard defaultScheduler 0
 main :: IO ()
 main = do
   card <- newCard
-  card' <- review card Good
+  (card', revLog) <- review card Good
   putStrLn "First review"
   print card'
-  card'' <- review card' Easy
+  -- ActiveCard (CardDetails {cardId = 2, cardState = Learning, cardDue = <yout time in UTC + 10 minutes>, cardLastReview = <yout time in UTC>,
+  -- cardStep = 1, cardLapses = 0, cardRepetitions = 1, cardStability = 3.2602, cardDifficulty = 4.884631634813845})
+  print revLog
+  -- Rev iewLog {revLogCardId = 2, revLogRating = Easy, revLogReviewDatetime = <your time in UTC>, revLogReviewDuration = 0s}
+  (card'',_) <- review card' Easy
   putStrLn "Second review"
   print card''
 ```
@@ -90,12 +94,12 @@ main = do
   putStrLn "Card from pure generation function and review function"
   print cardFromPure
   cardNormal <- newCard
-  -- fuzzing only effects cards in review state, so this won't actually affect anything in this example
+  -- change review date slightly randomly
   (fuzzedCard, _) <- reviewCardFuzz 0 card Easy
-  -- It will now though
-  (fuzzedCard', _) <- reviewCardFuzz 0 fuzzedCard Easy
   putStrLn "fuzzed result: due date may change. Are yuo feeling lucky?"
-  print fuzzedCard'
+  print fuzzedCard
+  -- (ActiveCard (CardDetails {cardId = 2, cardState = Reviewing, cardDue = <17 +- a few days in the future>, cardLastReview = <your time in UTC>,
+  -- cardStep = 0, cardLapses = 0, cardRepetitions = 2, cardStability = 29.573975629435004, cardDifficulty = 1.0})
   let reviewTime = (fromGregorian 1970 1 1) 0
   -- The fuzzed "atTime" is though, as randomness requires IO
   (fuzzedExplicitDateCard, _) <- reviewCardFuzzWithDate 0 card Again reviewTime

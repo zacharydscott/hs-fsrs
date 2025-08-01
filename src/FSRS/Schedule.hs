@@ -15,7 +15,7 @@ where
 import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), genericParseJSON, genericToJSON)
 import Data.List (foldl')
 import Data.Time (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime, getCurrentTime, nominalDay)
-import FSRS.Card (Card (..), CardDetails (..), CardState (..), Difficulty, Stability, getCardId, getLapses, getRepetitions, isReviewing)
+import FSRS.Card (Card (..), CardDetails (..), CardState (..), Difficulty, Stability, getCardId, getLapses, getRepetitions)
 import FSRS.Parameters (Parameters (..), defaultParameters, difficultyMax, difficultyMin, stabilityMin)
 import FSRS.Rating (Rating (..), fromRating)
 import FSRS.ReviewLog (ReviewLog (..))
@@ -109,7 +109,7 @@ reviewCardFuzzAtTime conf reviewDuration card rating reviewDate = do
                 Relearning -> (updateRelearningCard conf details rating elapsedDays, False)
       cid = getCardId card
   fuzzedInterval <-
-    if isReviewing card
+    if suState update == Reviewing
       then getFuzzedInterval (scMaximumInterval conf) (suInterval update)
       else pure $ suInterval update
   let updatedCard =
