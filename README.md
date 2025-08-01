@@ -14,8 +14,6 @@ progress, and will be provided in the hs-rs-fsrs (a lot of 's's, I know) library
 - [Installation](#installation)
 - [Quickstart](#quickstart)
 - [Usage](#usage)
-- [Haskell Specifics (Start here if you have limited Haskell Experience)](#haskell-specifics)
-- [Reference](#reference)
 - [API Documentation](#api-documentation)
 - [Contribute](#contribute)
 
@@ -36,15 +34,16 @@ main = do
   card <- newCard
   putStrLn "New card with timestamp date"
   print card
-  (card', reviewLog) <- reviewCard defaultScheduler 9 card Good 
-  --                                                   |      | Again, Hard, Good, or Easy
-  --                                                   | the duration of time in seconds that the review took
+  (card', reviewLog) <- reviewCard defaultScheduler 9 card Good
+  --                                                |      | Again, Hard, Good, or Easy
+  --                                                | the duration of time in seconds that the review took
   putStrLn "Card after 'Good' review"
   print card'
   putStrLn "Review log"
   print reviewLog
 ```
 
+## Usage
 The default `newCard` is `IO Card`, because it sets the current Posix millisecond as the id.
 Likewise, `reviewCard` sets the review date as the current time. 
 
@@ -91,9 +90,12 @@ main = do
   putStrLn "Card from pure generation function and review function"
   print cardFromPure
   cardNormal <- newCard
-  (fuzzedCard, _) <- reviewCardFuzz 0 card Again
+  -- fuzzing only effects cards in review state, so this won't actually affect anything in this example
+  (fuzzedCard, _) <- reviewCardFuzz 0 card Easy
+  -- It will now though
+  (fuzzedCard', _) <- reviewCardFuzz 0 fuzzedCard Easy
   putStrLn "fuzzed result: due date may change. Are yuo feeling lucky?"
-  print fuzzedCard
+  print fuzzedCard'
   let reviewTime = (fromGregorian 1970 1 1) 0
   -- The fuzzed "atTime" is though, as randomness requires IO
   (fuzzedExplicitDateCard, _) <- reviewCardFuzzWithDate 0 card Again reviewTime
@@ -129,13 +131,18 @@ main = do
   print noFuzzCurrentTimeLog
 ```
 
-## Haskell Specifics
-This is not a lecture Haskell, but an explanation for some design decisions which differ from implementations
-in imperative languages. This is still a proposal, so if you disagree with any decision, open an issue and let
-me know. There were no advanced features necessary or proper, so it should be fairly straightforward.
+- [API Documentation](#api-documentation)
+-- in progress
 
-There are really only a few data types declared and some functions. There are no classes or methods in Haskell,
-so the main card review functions take in a `Scheduler`, which is really more of a scheduling configuration.
+## Contribute
+I'm not anticipating anynoe needing to contribute to this. It's a pretty small project, and pretty niche.
+But if you've got a bug, or my code does, feel more than free to raise an issue or a PR. I do have one
+restriction. I want ot match the Python implementation 1-to-1. Some pains have been taken to make sure
+json serialization/deserialization are interoperable, despite data being internally managed a bit differently.
+
+For anyone new to Haskell, just a few quick notes on some of the design decisions.
+The main card review functions take in a `Scheduler`, which is really more of a scheduling configuration.
+This is roughly equivalent to the Scheduler classes in other implementations.
 Instead of one `reviewCardTime` function, it was split into `reviewCardAtTime`, `reviewCardFuzz`, 
 `reviewCardNow`, and `reviewCardFuzzNow` for a couple of reasons. Accessing random numbers is
 non-deterministic, and requires using the IO monad. The actual algorithm itself is entirely pure outside 
@@ -146,14 +153,9 @@ The only way to wrap everything together would be to force it into an IO monad i
 the date review argument to be a `Maybe UTCTime`. This is not particularly idiomatic. That's why those are 
 kept in the `FSRS.Schedule.Utils` module.
 
-One thing that may look a bit odd if you're unfamiliar with Haskell is the prefixing in data types. They look
-like structs, but it's more complicated, unfortunately. Access occurs by `cardId card` to get a card's id for
-instance, so each record is in the main namespace. If it was simply `id` then it would clash with the `id`
-function.
-
-One more, slightly more technical point: There could be a `SpaceRepetitionScheduler` typeclass, and the
-Scheduler could have an instance of it. There are two main reasons I haven't. Primarily, the inputs and outputs
-of the FSRS algorithm seem fairly unique, The SM-2 or similar would not have the same arguments. Secondly,
-if it later becomes necessary, it should be possible to add one in later without breaking the current API.
-The main reviewCard and related functions would still be exported from `FSRS`, it would only affect users
-importing from the sub-modules.
+One last note about the `Card` data type iteslf. Given that a new card really doesn't have stability, difficulty,
+steps, a last review data, or a due date, I elected to split the `Card` data type into a sum data type between new cards
+and "active cards." I could have split it into 4 different types this way, but this would have a huge access cost.
+Beside steps, learning, reviewing, and relearning all share the same fields in the domain space, so the state is just a 
+property inside the details object. The main advantage of the algebraic type approach here is that checks for Nothing are
+never needed on the actual properties.
