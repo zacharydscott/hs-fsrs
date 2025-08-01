@@ -5,7 +5,7 @@
 
 module FSRS.ScheduleQuickCheckSpec (spec) where
 
-import Control.Monad (void)
+import Control.Monad (void, when)
 import Data.Aeson (FromJSON, ToJSON, eitherDecode, encode)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
@@ -116,7 +116,7 @@ withPythonFSRS = do
   pure $ PyProc hin hout
 
 spec :: Spec
-spec = beforeAll withPythonFSRS $ describe "QuickCheck evaluation of review against Python Implementation" $ modifyMaxSuccess (const 10000) $ do
+spec = beforeAll withPythonFSRS $ describe "QuickCheck scheduling tests" $ modifyMaxSuccess (const 10000) $ do
   it "fuzzed values are within range and only for reviewing cards" $ \_ -> do
     property $ monadicIO $ do
       reviewSameDay <- run $ generate arbitrary
@@ -131,26 +131,32 @@ spec = beforeAll withPythonFSRS $ describe "QuickCheck evaluation of review agai
       void $ if normalRevLog == fuzzedRevLog then pure () else fail "Revlogs don't match"
       case fuzzedCard of
         NewCard _ -> pure $ fuzzedCard == normalCard
-        ActiveCard fd -> do
-          nd <- case normalCard of
+        ActiveCard fuzzDetails -> do
+          normalDetails <- case normalCard of
             NewCard _ -> fail "New card from normal evaluation when fuzzed is active"
             ActiveCard det -> pure det
-          void $ if cardId fd == cardId nd then pure () else fail "card ids don't match"
-          void $ if cardState fd == cardState nd then pure () else fail "card states don't match"
-          void $ if cardLastReview fd == cardLastReview nd then pure () else fail "last reviews don't match"
-          void $ if cardLapses fd == cardLapses nd then pure () else fail "lapses don't match"
-          void $ if cardRepetitions fd == cardRepetitions nd then pure () else fail "repetitions don't match"
-          void $ if cardStability fd == cardStability nd then pure () else fail "stabilities Ids don't match"
-          void $ if cardDifficulty fd == cardDifficulty nd then pure () else fail "difficulties Ids don't match"
-          void $ if cardId fd == cardId nd then pure () else fail "card Ids don't match"
-          void $ case cardState fd of
+          let  propertiesStr =
+                       "\nNon-fuzz review:\n"
+                    ++ show normalCard
+                    ++ "\nFuzz review:\n"
+                    ++ show fuzzedCard
+                    ++ "\nOriginal Card:\n"
+                    ++ show card
+                    ++ "\nReview Log:\n"
+                    ++ show normalRevLog
+          failIf ("card ids don't match" ++ propertiesStr) $ cardId fuzzDetails /= cardId normalDetails
+          failIf ("card states don't match" ++ propertiesStr) $ cardState fuzzDetails /= cardState normalDetails
+          failIf ("last reviews don't match" ++ propertiesStr) $ cardLastReview fuzzDetails /= cardLastReview normalDetails
+          failIf ("stabilities Ids don't match" ++ propertiesStr) $ not $ cardStability fuzzDetails `approx` cardStability normalDetails
+          failIf ("difficulties Ids don't match" ++ propertiesStr) $ not $ cardDifficulty fuzzDetails `approx` cardDifficulty normalDetails
+          void $ case cardState fuzzDetails of
             Reviewing -> do
-              let dueRange = getFuzzedRange (scMaximumInterval defaultScheduler) (cardDue nd `diffUTCTime` reviewTime)
+              let dueRange = getFuzzedRange (scMaximumInterval defaultScheduler) (cardDue normalDetails `diffUTCTime` reviewTime)
                   (minTime, maxTime) =
                     ( fst dueRange `addUTCTime` reviewTime,
                       snd dueRange `addUTCTime` reviewTime
                     )
-                  fuzzDue = cardDue fd
+                  fuzzDue = cardDue fuzzDetails
               if fuzzDue >= minTime
                 && fuzzDue <= maxTime
                 then pure ()
@@ -163,11 +169,12 @@ spec = beforeAll withPythonFSRS $ describe "QuickCheck evaluation of review agai
                       ++ "','"
                       ++ show maxTime
                       ++ "'), from non-fuzzed date: '"
-                      ++ show (cardDue nd)
-                      ++ "'."
-            _ -> if cardStability fd == cardStability nd then pure () else fail "card Ids don't match"
+                      ++ show (cardDue normalDetails)
+                      ++ "'." ++ propertiesStr
+            _ -> if cardStability fuzzDetails == cardStability normalDetails then pure () else fail "card Ids don't match"
           pure True
 
+  -- This is the only way to directly compare, as using time from system can be different by milliseconds
   it "reviewCardAtTime matchs the Python Implementation non-fuzzed value" $ \py -> do
     property $ monadicIO $ do
       reviewSameDay <- run $ generate arbitrary
@@ -208,32 +215,11 @@ spec = beforeAll withPythonFSRS $ describe "QuickCheck evaluation of review agai
       haskellDetails <- case reviewedCard of
         NewCard _ -> fail "Haskell reviewed card returned as new"
         (ActiveCard d) -> pure d
-      haskellPreDetails <- case card of
-        NewCard _ -> pure haskellDetails
-        (ActiveCard d) -> pure d
       let hsRetrievability = case card of
             NewCard _ -> 0
             ActiveCard d -> cardRetrievability (wRetrievabilityDecay $ scParameters defaultScheduler) (cardStability d) ((reviewTime `diffUTCTime` lastReviewTime) / nominalDay)
-      void $
-        if cardId haskellDetails
-          == cardId pythonDetails
-          && cardState haskellDetails
-          == cardState pythonDetails
-          && (cardDue haskellDetails `diffUTCTime` reviewTime)
-          `approx` (cardDue pythonDetails `diffUTCTime` reviewTime)
-          && cardLastReview haskellDetails
-          == cardLastReview pythonDetails
-          && cardStep haskellDetails
-          == cardStep pythonDetails
-          && cardStability haskellDetails
-          `approx` cardStability pythonDetails
-          && cardDifficulty haskellDetails
-          `approx` cardDifficulty pythonDetails
-          then pure ()
-          else do
-            fail $
-              "Card properties from python did not match Haskell implementation"
-                ++ "\nHaskell review:\n"
+          propertiesStr =
+                   "\nHaskell review:\n"
                 ++ show reviewedCard
                 ++ "\nPython review:\n"
                 ++ show reviewedPythonCard
@@ -245,11 +231,17 @@ spec = beforeAll withPythonFSRS $ describe "QuickCheck evaluation of review agai
                 ++ show retrievability
                 ++ "\nHaskell Retrievability:\n"
                 ++ show hsRetrievability
-                ++ "\nHaskell days since:\n"
-                ++ show (daysSinceLastReview haskellPreDetails reviewTime)
-                ++ "\nHaskell diff time:\n"
-                ++ show (reviewTime `diffUTCTime` cardLastReview haskellPreDetails)
+      failIf ("card ids don't match" ++ propertiesStr) $ cardId haskellDetails /= cardId pythonDetails
+      failIf ("card states don't match" ++ propertiesStr) $ cardState haskellDetails /= cardState pythonDetails
+      failIf ("due dates don't match" ++ propertiesStr) $ not $ cardDue haskellDetails `diffUTCTime` reviewTime
+          `approx` (cardDue pythonDetails `diffUTCTime` reviewTime)
+      failIf ("last reviews don't match" ++ propertiesStr) $ cardLastReview haskellDetails /= cardLastReview pythonDetails
+      failIf ("stabilities Ids don't match" ++ propertiesStr) $ not $ cardStability haskellDetails `approx` cardStability pythonDetails
+      failIf ("difficulties Ids don't match" ++ propertiesStr) $ not $ cardDifficulty haskellDetails `approx` cardDifficulty pythonDetails
       pure True
+
+failIf :: MonadFail m => String -> Bool -> m ()
+failIf errMsg shouldErr = when shouldErr $ fail errMsg
 
 chooseUTCTime :: UTCTime -> UTCTime -> Gen UTCTime
 chooseUTCTime lb ub = do

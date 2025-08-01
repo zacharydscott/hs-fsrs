@@ -26,8 +26,7 @@ type Stability = Double
 
 type Difficulty = Double
 
--- | Serializes to 0, 1, 2, and 3 for New, Learning,
--- | Reviewing, and Relearning, respectively.
+-- | Serializes to 1, 2, and 3 for Learning, Reviewing, and Relearning respectively.
 data CardState
   = Learning
   | Reviewing
@@ -117,9 +116,7 @@ instance FromJSON Card where
   parseJSON = withObject "FSRS.Card" $ \v -> do
     cardId <- v .: "card_id"
     mLastReview <- v .:? "last_review" :: Parser (Maybe UTCTime)
-    -- if there is no last review date, the card hasn't been reviewed
-    -- this is more reliable than the state type, as new and learning
-    -- share '1' for interoperability with the python implementation
+    -- if there is no last review date, the card is new.
     case mLastReview of
       Nothing -> return $ NewCard cardId
       Just cardLastReview -> do
@@ -133,11 +130,12 @@ instance FromJSON Card where
         return $ ActiveCard $ CardDetails {..}
 
 instance ToJSON Card where
+  -- New cards are serialized as if they are active cards for Python interoperability
   toJSON (NewCard cid) =
     object
       [ "card_id" .= cid,
         "state" .= Learning,
-        "due" .= blankDate, -- purely because of bup in python implementation
+        "due" .= blankDate, -- required for Python compatibility. Possibly a bug there.
         "last_review" .= Null,
         "step" .= Null,
         "stability" .= Null,

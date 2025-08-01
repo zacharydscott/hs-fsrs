@@ -48,12 +48,10 @@ defaultScheduler =
       scMaximumInterval = 36500
     }
 
--- | This is an intermediate card update value which is for internal to scheduling module only.
--- | This is used to keep the actual update functions purely focused on changes to the card, so:
--- | 1) allowing the time values to be relative (actual dates handled by caller)
--- | 2) the updated interval is handed back, so fuzzing can occur. Fuzzing requires IO since it needs randomness
--- | 3) the review log doesn't need to be in the core calculation
--- | manipulated for fuzzing.
+-- | This is an intermediate card update value which is internal to the scheduling module only.
+-- | This is used to keep the actual update functions purely focused on changes to the card. The core FSRS
+-- | algorithm really cares about the time since the last review, and this allows the separation between
+-- | relative time and the actual date scheduling and revlog generation.
 data SchedulingUpdate = SchedulingUpdate
   { suStability :: Stability,
     suDifficulty :: Difficulty,
@@ -66,9 +64,11 @@ data SchedulingUpdate = SchedulingUpdate
 reviewCard :: Scheduler -> NominalDiffTime -> Card -> Rating -> IO (Card, ReviewLog)
 reviewCard s d c r = reviewCardAtTime s d c r <$> getCurrentTime
 
+-- | reviews a card with slight random alterations to the due date if in review state
 reviewCardFuzz :: Scheduler -> NominalDiffTime -> Card -> Rating -> IO (Card, ReviewLog)
 reviewCardFuzz s d c r = getCurrentTime >>= reviewCardFuzzAtTime s d c r
 
+-- | reviews a card at specified time, the only non-IO scheduling function.
 reviewCardAtTime :: Scheduler -> NominalDiffTime -> Card -> Rating -> UTCTime -> (Card, ReviewLog)
 reviewCardAtTime conf reviewDuration card rating reviewDate =
   let (update, didLapse) = case card of
@@ -96,6 +96,7 @@ reviewCardAtTime conf reviewDuration card rating reviewDate =
       reviewLog = ReviewLog cid rating reviewDate reviewDuration
    in (updatedCard, reviewLog)
 
+-- reviews a card at the specified time with slight random alterations to the due date if in review state
 reviewCardFuzzAtTime ::
   Scheduler -> NominalDiffTime -> Card -> Rating -> UTCTime -> IO (Card, ReviewLog)
 reviewCardFuzzAtTime conf reviewDuration card rating reviewDate = do
@@ -357,9 +358,9 @@ getDeltaForInterval interval =
 flooredDays :: (Num a, Ord a) => NominalDiffTime -> a
 flooredDays delta = max 0 $ fromIntegral (floor delta :: Int)
 
--- a quick of the fsrs algorithm for stepped processes on hard selectin
+-- a quirk of the fsrs algorithm for stepped processes on hard selectin
 hardSteppedInterval :: Int -> [NominalDiffTime] -> NominalDiffTime
-hardSteppedInterval _ [] = 0 -- should never occur, checks occur before
+hardSteppedInterval _ [] = 0 -- should never occur, checks occur before, I may flatten the structure
 hardSteppedInterval 0 [s1] = 1.5 * s1
 hardSteppedInterval 0 (s1 : s2 : _) = (s1 + s2) / 2
 hardSteppedInterval idx steps = steps !! idx

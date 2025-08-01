@@ -43,6 +43,7 @@ data Parameters = Parameters
   }
   deriving (Show, Eq)
 
+-- | Default Parameter set from OSR, used by the default scheduler
 defaultParameters :: Parameters
 defaultParameters =
   Parameters

@@ -61,14 +61,12 @@ review = fst <$> reviewCard defaultScheduler 0
 main :: IO ()
 main = do
   card <- newCard
-  (card', revLog) <- review card Good
+  card' <- review card Good
   putStrLn "First review"
   print card'
   -- ActiveCard (CardDetails {cardId = 2, cardState = Learning, cardDue = <yout time in UTC + 10 minutes>, cardLastReview = <yout time in UTC>,
   -- cardStep = 1, cardLapses = 0, cardRepetitions = 1, cardStability = 3.2602, cardDifficulty = 4.884631634813845})
-  print revLog
-  -- Rev iewLog {revLogCardId = 2, revLogRating = Easy, revLogReviewDatetime = <your time in UTC>, revLogReviewDuration = 0s}
-  (card'',_) <- review card' Easy
+  card'' <- review card' Easy
   putStrLn "Second review"
   print card''
 ```
