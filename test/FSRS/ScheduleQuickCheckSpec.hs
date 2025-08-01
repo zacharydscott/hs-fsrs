@@ -250,9 +250,6 @@ chooseUTCTime lb ub = do
   timeSecond <- chooseInt (lbSec, obSec)
   pure $ posixSecondsToUTCTime $ fromIntegral timeSecond
 
-daysSinceLastReview :: CardDetails -> UTCTime -> NominalDiffTime
-daysSinceLastReview card reviewDate = max 0 $ (reviewDate `diffUTCTime` cardLastReview card) / nominalDay
-
 -- replicating scheduler code, perhaps should be exported
 getFuzzedRange :: Int -> NominalDiffTime -> (NominalDiffTime, NominalDiffTime)
 getFuzzedRange maximumInterval interval =
