@@ -1,0 +1,16 @@
+Resolving dependencies...
+
+The following packages need bounds and here is a suggested starting point.
+You can copy and paste this into the build-depends section in your .cabal
+file and it should work (with the appropriate removal of commas).
+
+Note that version bounds are a statement that you've successfully built and
+tested your package and expect it to work with any of the specified package
+versions (PROVIDED that those packages continue to conform with the PVP).
+Therefore, the version bounds generated here are the most conservative
+based on the versions that you are currently building with. If you know
+your package will work with versions outside the ranges generated here,
+feel free to widen them.
+
+aeson >= 2.2.3 && < 2.3,
+time >= 1.12.2 && < 1.13,

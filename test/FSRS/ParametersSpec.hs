@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module FSRS.Parameters_Spec (spec) where
+module FSRS.ParametersSpec (spec) where
 
 import Data.Aeson
-import Test.Hspec
-
-import FSRS.Parameters
 import Data.ByteString.Lazy (ByteString)
 import Data.Either (isLeft)
+import FSRS.Parameters
+import Test.Hspec
 
 -- May change this in the furute, it's very hardcoded
 -- Note this is out of the default params constructor order
@@ -23,10 +22,10 @@ spec = do
       Success defaultParameters `shouldBe` fromJSON (toJSON defaultParameters)
     it "have the expected JSON string form and parameter values" $ do
       encode defaultParameters `shouldBe` expectedDefaultParametersJSONString
-    it "deserialize with the correct argument order from a json string" $ do 
+    it "deserialize with the correct argument order from a json string" $ do
       eitherDecode expectedDefaultParametersJSONString `shouldBe` Right defaultParameters
     it "fails to decode when the JSON array has the wrong length" $ do
-         let tooShort = "[1,2,3]"
-             tooLong  = "[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]"
-         (eitherDecode tooShort :: Either String Parameters) `shouldSatisfy` isLeft
-         (eitherDecode tooLong :: Either String Parameters) `shouldSatisfy` isLeft
+      let tooShort = "[1,2,3]"
+          tooLong = "[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]"
+      (eitherDecode tooShort :: Either String Parameters) `shouldSatisfy` isLeft
+      (eitherDecode tooLong :: Either String Parameters) `shouldSatisfy` isLeft

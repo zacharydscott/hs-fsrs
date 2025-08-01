@@ -1,28 +1,29 @@
 module FSRS.Utils where
 
-import Data.Aeson (
-  Options (fieldLabelModifier),
-  defaultOptions, Value (..), camelTo2
+import Data.Aeson
+  ( Options (fieldLabelModifier),
+    Value (..),
+    camelTo2,
+    defaultOptions,
   )
 import Data.Char (toLower)
-import Data.Time (NominalDiffTime, nominalDay, UTCTime, fromGregorian)
-import Data.Time.Clock (UTCTime(..))
 import Data.Scientific (toRealFloat)
+import Data.Time (NominalDiffTime, UTCTime, fromGregorian, nominalDay)
+import Data.Time.Clock (UTCTime (..))
 
 blankDate :: UTCTime
-blankDate = UTCTime { utctDay = fromGregorian 1970 1 1, utctDayTime = 0 }
+blankDate = UTCTime {utctDay = fromGregorian 1970 1 1, utctDayTime = 0}
 
 parseDoubleFromJSON :: Value -> Either String Double
 parseDoubleFromJSON (Number n) = Right $ toRealFloat n
 parseDoubleFromJSON v = Left $ "Expected number, but recieved value " ++ show v
 
-
 genericParseOptionsWithPrefix :: String -> Options
-genericParseOptionsWithPrefix prefix =  defaultOptions { fieldLabelModifier = snakeCase . lowerFirst . drop (length prefix ) }
+genericParseOptionsWithPrefix prefix = defaultOptions {fieldLabelModifier = snakeCase . lowerFirst . drop (length prefix)}
 
 lowerFirst :: String -> String
 lowerFirst "" = ""
-lowerFirst (c:cs) = toLower c : cs
+lowerFirst (c : cs) = toLower c : cs
 
 snakeCase :: String -> String
 snakeCase = camelTo2 '_'

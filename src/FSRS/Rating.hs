@@ -1,20 +1,21 @@
 module FSRS.Rating where
 
-import Data.Aeson (FromJSON (..), withScientific, ToJSON, Value (Number))
-import Data.Aeson.Types (ToJSON(..))
+import Data.Aeson (FromJSON (..), ToJSON, Value (Number), withScientific)
+import Data.Aeson.Types (ToJSON (..))
 
-data Rating = Again
-            | Hard
-            | Good
-            | Easy
-              deriving (Show, Eq)
+data Rating
+  = Again
+  | Hard
+  | Good
+  | Easy
+  deriving (Show, Eq)
 
 fromRating :: Num a => Rating -> a
 fromRating rating = case rating of
   Again -> 1
-  Hard  -> 2
-  Good  -> 3
-  Easy  -> 4
+  Hard -> 2
+  Good -> 3
+  Easy -> 4
 
 toRating :: (Num a, Eq a) => a -> Maybe Rating
 toRating v = case v of
