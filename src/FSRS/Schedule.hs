@@ -6,9 +6,11 @@ module FSRS.Schedule (
   reviewCardAtTime,
   reviewCardFuzz,
   reviewCardFuzzAtTime,
+  cardRetrievability,
+  fuzzRanges
 ) where
 
-import FSRS.Card (Card(..), CardState(..), Difficulty, Stability)
+import FSRS.Card (Card(..), Difficulty, Stability, CardState (..), isReviewing, CardDetails (..), getCardId, getLapses, getRepetitions)
 import FSRS.Parameters (Parameters(..), stabilityMin, difficultyMin, difficultyMax, defaultParameters)
 import FSRS.Rating (Rating(..), fromRating)
 import Data.Time (NominalDiffTime, diffUTCTime, nominalDay, addUTCTime, UTCTime, getCurrentTime)
@@ -65,80 +67,80 @@ reviewCardFuzz s d c r = getCurrentTime >>= reviewCardFuzzAtTime s d c r
 
 reviewCardAtTime :: Scheduler -> NominalDiffTime -> Card -> Rating -> UTCTime -> (Card, ReviewLog)
 reviewCardAtTime conf reviewDuration card rating reviewDate =
-  let mElapsedDays = daysSinceLastReview card reviewDate
-      update = case cardState card of
-        New -> updateNewCard conf card rating
-        Learning -> updateLearningCard conf card rating mElapsedDays
-        Reviewing -> updateReviewingCard conf card rating mElapsedDays
-        Relearning -> updateRelearningCard conf card rating mElapsedDays
-      didLapse = rating == Again && cardState card == Reviewing
-      updatedCard = Card
-        { cardId = cardId card
+  let (update, didLapse) = case card of
+        NewCard _ -> (updateNewCard conf rating, False)
+        ActiveCard details -> let elapsedDays = daysSinceLastReview details reviewDate
+          in case cardState details of
+            Learning -> (updateLearningCard conf details rating elapsedDays, False)
+            Reviewing -> (updateReviewingCard conf details rating elapsedDays, rating == Again)
+            Relearning -> (updateRelearningCard conf details rating elapsedDays, False)
+      cid = getCardId card
+      updatedCard = ActiveCard $ CardDetails
+        { cardId = cid
         , cardState = suState update
         , cardDue =  suInterval update `addUTCTime` reviewDate
-        , cardLastReview = Just reviewDate
+        , cardLastReview = reviewDate
         , cardStep = suStep update
-        , cardLapses = cardLapses card + if didLapse then 1 else 0
-        , cardRepetitions = cardRepetitions card + 1
+        , cardLapses = getLapses card + if didLapse then 1 else 0
+        , cardRepetitions = getRepetitions card + 1
         , cardStability = suStability update
         , cardDifficulty = suDifficulty update
         }
-      reviewLog = ReviewLog (cardId card) rating reviewDate reviewDuration
+      reviewLog = ReviewLog cid rating reviewDate reviewDuration
   in (updatedCard, reviewLog)
 
 reviewCardFuzzAtTime ::
   Scheduler -> NominalDiffTime -> Card -> Rating -> UTCTime -> IO (Card, ReviewLog)
 reviewCardFuzzAtTime conf reviewDuration card rating reviewDate = do
-  let mElapsedDays = daysSinceLastReview card reviewDate
-      update = case cardState card of
-        New -> updateNewCard conf card rating
-        Learning -> updateLearningCard conf card rating mElapsedDays
-        Reviewing -> updateReviewingCard conf card rating mElapsedDays
-        Relearning -> updateRelearningCard conf card rating mElapsedDays
-      didLapse = rating == Again && cardState card == Reviewing
-  fuzzedInterval <- getFuzzedInterval conf (suInterval update)
-  let updatedCard = Card
-        { cardId = cardId card
+  let (update, didLapse) = case card of
+        NewCard _ -> (updateNewCard conf rating, False)
+        ActiveCard details -> let elapsedDays = daysSinceLastReview details reviewDate
+          in case cardState details of
+          Learning -> (updateLearningCard conf details rating elapsedDays, False)
+          Reviewing -> (updateReviewingCard conf details rating elapsedDays, rating == Again)
+          Relearning -> (updateRelearningCard conf details rating elapsedDays, False)
+      cid = getCardId card
+  fuzzedInterval <- if isReviewing card
+    then getFuzzedInterval (scMaximumInterval conf) (suInterval update)
+    else pure $ suInterval update
+  let updatedCard = ActiveCard $ CardDetails
+        { cardId = cid
         , cardState = suState update
         , cardDue =  fuzzedInterval `addUTCTime` reviewDate
-        , cardLastReview = Just reviewDate
+        , cardLastReview = reviewDate
         , cardStep = suStep update
-        , cardLapses = cardLapses card + if didLapse then 1 else 0
-        , cardRepetitions = cardRepetitions card + 1
+        , cardLapses = getLapses card + if didLapse then 1 else 0
+        , cardRepetitions = getRepetitions card + 1
         , cardStability = suStability update
         , cardDifficulty = suDifficulty update
         }
-      reviewLog = ReviewLog (cardId card) rating reviewDate reviewDuration
+      reviewLog = ReviewLog cid rating reviewDate reviewDuration
   return (updatedCard, reviewLog)
 
-updateNewCard :: Scheduler -> Card -> Rating -> SchedulingUpdate
-updateNewCard conf card rating =
+updateNewCard :: Scheduler -> Rating -> SchedulingUpdate
+updateNewCard conf rating =
   let params = scParameters conf
       updatedStability = initialStability params rating
       updatedDifficulty = initialDifficulty params rating
       learningSteps = scLearningSteps conf
-      step = cardStep card
       partialUpdate = SchedulingUpdate updatedStability updatedDifficulty -- currying to curb repetition
-  in if null learningSteps || (step >= length learningSteps && rating /= Again)
+  in if null learningSteps
     then partialUpdate (nextInterval conf updatedStability) Reviewing 0
     else case rating of
       Again -> partialUpdate (head learningSteps) Learning 0
       Hard -> let updatedInterval
-                   | step == 0 && length learningSteps == 1
-                   = head learningSteps * 1.5
-                   | step == 0 -- omitting check for 2 or greater as it is implied
-                   = let (s1:s2:_) = learningSteps in (s1 + s2) / 2
-                   | otherwise
-                   = learningSteps !! step
-              in partialUpdate updatedInterval Learning step
-      Good -> if step + 1 == length learningSteps
+                   | [] <- learningSteps = 0 -- can't occur
+                   | [s1] <- learningSteps = s1 * 1.5
+                   | (s1:s2:_) <- learningSteps = (s1 + s2) / 2
+              in partialUpdate updatedInterval Learning 0
+      Good -> if length learningSteps == 1
                 then partialUpdate (nextInterval conf updatedStability) Reviewing 0
-                else partialUpdate (learningSteps !! (step + 1)) Learning (step + 1)
+                else partialUpdate (learningSteps !! 1) Learning 1
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
-updateLearningCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
-updateLearningCard conf card rating mElapsedDays =
-  let updatedStability = shortOrLongTermStability conf card rating mElapsedDays
+updateLearningCard :: Scheduler -> CardDetails -> Rating -> NominalDiffTime -> SchedulingUpdate
+updateLearningCard conf card rating elapsedDays =
+  let updatedStability = shortOrLongTermStability conf card rating elapsedDays
       updatedDifficulty = nextDifficulty conf (cardDifficulty card) rating
       learningSteps = scLearningSteps conf
       step = cardStep card
@@ -147,23 +149,23 @@ updateLearningCard conf card rating mElapsedDays =
     then partialUpdate (nextInterval conf updatedStability) Reviewing 0
     else case rating of
       Again -> partialUpdate (head learningSteps) Learning 0
-      Hard -> let updatedInterval
-                   | step == 0 && length learningSteps == 1
-                   = head learningSteps * 1.5
-                   | step == 0 -- omitting check for 2 or greater as it is implied
-                   = let (s1:s2:_) = learningSteps in (s1 + s2) / 2
-                   | otherwise
-                   = learningSteps !! step
+      Hard -> let updatedInterval = hardSteppedInterval step learningSteps
+                   -- | step == 0 && length learningSteps == 1
+                   -- = head learningSteps * 1.5
+                   -- | step == 0 -- omitting check for 3 or greater as it is implied
+                   -- = let (s1:s2:_) = learningSteps in (s1 + s2) / 2
+                   -- | otherwise
+                   -- = learningSteps !! step
               in partialUpdate updatedInterval Learning step
       Good -> if step + 1 == length learningSteps
                 then partialUpdate (nextInterval conf updatedStability) Reviewing 0
                 else partialUpdate (learningSteps !! (step + 1)) Learning (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
-updateReviewingCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
-updateReviewingCard conf card rating mElapsedDays =
+updateReviewingCard :: Scheduler -> CardDetails -> Rating -> NominalDiffTime -> SchedulingUpdate
+updateReviewingCard conf card rating elapsedDays =
   let difficulty = cardDifficulty card
-      updatedStability = shortOrLongTermStability conf card rating mElapsedDays
+      updatedStability = shortOrLongTermStability conf card rating elapsedDays
       updatedDifficulty = nextDifficulty conf difficulty rating
       updataedState = if rating == Again && not (null (scRelearningSteps conf))
         then Relearning
@@ -174,10 +176,10 @@ updateReviewingCard conf card rating mElapsedDays =
   in SchedulingUpdate updatedStability updatedDifficulty updatedInterval updataedState 0
 
 
-updateRelearningCard :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> SchedulingUpdate
-updateRelearningCard conf card rating mElapsedDays =
+updateRelearningCard :: Scheduler -> CardDetails -> Rating -> NominalDiffTime -> SchedulingUpdate
+updateRelearningCard conf card rating elapsedDays =
   let difficulty = cardDifficulty card
-      updatedStability = shortOrLongTermStability conf card rating mElapsedDays
+      updatedStability = shortOrLongTermStability conf card rating elapsedDays
       updatedDifficulty = nextDifficulty conf difficulty rating
       relearningSteps = scRelearningSteps conf
       step = cardStep card
@@ -186,25 +188,27 @@ updateRelearningCard conf card rating mElapsedDays =
     then partialUpdate (nextInterval conf updatedStability) Reviewing 0
     else case rating of
       Again -> partialUpdate (head relearningSteps) Relearning 0
-      Hard -> let updatedInterval
-                   | step == 0 && length relearningSteps == 1
-                   = head relearningSteps * 1.5
-                   | step == 0 -- omitting check for 2 or greater as it is implied
-                   = let (s1:s2:_) = relearningSteps in (s1 + s2) / 2
-                   | otherwise
-                   = relearningSteps !! step
+      Hard -> let updatedInterval = hardSteppedInterval step relearningSteps
+                   -- | step == 0 && length relearningSteps == 1
+                   -- = head relearningSteps * 1.5
+                   -- | step == 0 -- omitting check for 2 or greater as it is implied
+                   -- = let (s1:s2:_) = relearningSteps in (s1 + s2) / 2
+                   -- | otherwise
+                   -- = relearningSteps !! step
               in partialUpdate updatedInterval Relearning step
       Good -> if step + 1 == length relearningSteps
                 then partialUpdate (nextInterval conf updatedStability) Reviewing 0
                 else partialUpdate (relearningSteps !! (step + 1)) Reviewing (step + 1)
       Easy -> partialUpdate (nextInterval conf updatedStability) Reviewing 0
 
-shortOrLongTermStability :: Scheduler -> Card -> Rating -> Maybe NominalDiffTime -> Stability
-shortOrLongTermStability conf card rating mElapsedDays
-  | Just d <- mElapsedDays, d < 1 = shortTerm
-  | otherwise                     = longTerm
+shortOrLongTermStability :: Scheduler -> CardDetails -> Rating -> NominalDiffTime -> Stability
+shortOrLongTermStability conf card rating elapsedDays
+  | elapsedDays < 1 = shortTerm
+  | otherwise       = longTerm
   where shortTerm = shortTermStability conf (cardStability card) rating
-        longTerm = let retrievability = cardRetrievability conf card mElapsedDays
+        longTerm = let retrievability = cardRetrievability
+                        (wRetrievabilityDecay $ scParameters conf)
+                        (cardStability card) elapsedDays
                    in nextStability conf (cardDifficulty card) retrievability rating (cardStability card)
 
 nextStability :: Scheduler -> Difficulty -> Double -> Rating -> Stability -> Double
@@ -224,7 +228,7 @@ nextForgetStability conf difficulty retrievability stability =
         * (difficulty ** (-diffExp))
         * ((stability + 1) ** stabExp - 1)
         * exp (retCoef * (1 - retrievability))
-      stStabExp = wShortTermStabilityStabilityExp params
+      stStabExp = wShortTermStabilityExpCoef params
       stRatingNorm = wShortTermStabilityRatingNormalization params
       shortTermVersion = stability / exp (stStabExp * stRatingNorm)
   in min longTermVersion shortTermVersion
@@ -259,8 +263,8 @@ shortTermStability conf stability rating =
   in clampStability $ stability * shortTermInc'
 
 -- Fractional of the number of days
-daysSinceLastReview :: Card  -> UTCTime -> Maybe NominalDiffTime
-daysSinceLastReview card reviewDate = fmap (\lastReview -> max 0 $ reviewDate `diffUTCTime` lastReview / nominalDay) (cardLastReview card)
+daysSinceLastReview :: CardDetails -> UTCTime -> NominalDiffTime
+daysSinceLastReview card reviewDate = max 0 $ (reviewDate `diffUTCTime` cardLastReview card) / nominalDay 
 
 initialStability :: Parameters -> Rating -> Stability
 initialStability params rating = clampStability $ case rating of
@@ -303,23 +307,22 @@ nextDifficulty conf difficulty rating =
       meanReversionDifficulty = mr * easyDifficulty + (1 - mr) * dampedDifficulty
   in clampDifficulty meanReversionDifficulty
 
-cardRetrievability :: Scheduler -> Card -> Maybe NominalDiffTime -> Double
-cardRetrievability conf card mElapsedDays = case mElapsedDays of
-  Nothing -> 0
-  Just elapsedDays -> let decay = -(wRetrievabilityDecay $ scParameters conf)
-                          roundedElapsed = fromIntegral (floor elapsedDays :: Int)
-                      in (1 + decayFactor decay * roundedElapsed / cardStability card) ** decay
+cardRetrievability :: Double -> Stability -> NominalDiffTime -> Double
+cardRetrievability decayParam stability elapsedDays =
+  let decay = (-decayParam)
+      totalDays = flooredDays elapsedDays
+  in (1 + decayFactor decay * totalDays / stability) ** decay
 
-getFuzzedInterval :: Scheduler -> NominalDiffTime -> IO NominalDiffTime
-getFuzzedInterval conf interval = if interval / nominalDay < 2.5
+getFuzzedInterval :: Int -> NominalDiffTime -> IO NominalDiffTime
+getFuzzedInterval maxInterval interval = if interval / nominalDay < 2.5
   then pure interval
   else do
     let intervalDays = realToFrac (floor $ interval / nominalDay :: Integer)
         delta = getDeltaForInterval intervalDays
-        maxIntr = min (round $ intervalDays + delta) (scMaximumInterval conf)
+        maxIntr = min (round $ intervalDays + delta) maxInterval
         minIntr = min maxIntr (max 2 (round $ intervalDays - delta))
     fuzzedIntr <- randomRIO (minIntr, maxIntr)
-    return $ nominalDay * realToFrac (min fuzzedIntr (scMaximumInterval conf))
+    return $ nominalDay * realToFrac (min fuzzedIntr maxInterval)
 
 fuzzRanges :: [(NominalDiffTime, Maybe NominalDiffTime, NominalDiffTime)]
 fuzzRanges =
@@ -337,3 +340,12 @@ getDeltaForInterval interval =
         fuzzRangeStep intr delta (start, end, factor) =
           delta + factor * max (factorCap intr end - start) 0
 
+flooredDays :: (Num a, Ord a) => NominalDiffTime -> a
+flooredDays delta = max 0 $ fromIntegral (floor delta :: Int)
+
+-- a quick of the fsrs algorithm for stepped processes on hard selectin
+hardSteppedInterval :: Int -> [NominalDiffTime] -> NominalDiffTime
+hardSteppedInterval _ [] = 0 -- should never occur, checks occur before
+hardSteppedInterval 0 [s1] = 1.5 * s1
+hardSteppedInterval 0 (s1:s2:_) = (s1 + s2) / 2
+hardSteppedInterval idx steps = steps !! idx

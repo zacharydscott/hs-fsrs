@@ -17,11 +17,11 @@ exampleTime2 :: UTCTime
 exampleTime2 = UTCTime (fromGregorian 1970 1 2) (secondsToDiffTime 0)
 
 testReveiwingCard :: Card
-testReveiwingCard = Card
+testReveiwingCard = ActiveCard $ CardDetails
   { cardId = 11
   , cardState = Reviewing
   , cardDue = exampleTime2
-  , cardLastReview = Just exampleTime1
+  , cardLastReview = exampleTime1
   , cardLapses = 1
   , cardStep = 2
   , cardRepetitions = 3
@@ -43,41 +43,30 @@ expectedReviewingCardJSONObject = object
   ]
 
 testNewCard :: Card
-testNewCard = Card
-  { cardId = 22
-  , cardState = New
-  , cardDue = exampleTime1
-  , cardLastReview = Nothing
-  , cardLapses = 0
-  , cardStep = 0
-  , cardRepetitions = 0
-  , cardStability = 0.0
-  , cardDifficulty = 0.0
-  }
+testNewCard = NewCard 22
+
+blankDate :: UTCTime
+blankDate = UTCTime (fromGregorian 1970 1 1) 0
 
 expectedNewCardJSONObject :: Value
 expectedNewCardJSONObject = object
   [ "card_id"     .= Number 22
-  , "state"       .= Number 0
-  , "due"         .= iso8601Show exampleTime1
+  , "state"       .= Number 1
+  , "due"         .= iso8601Show blankDate
+  , "step"        .= Null
   , "last_review" .= Null
-  , "step"        .= Number 0
-  , "lapses"      .= Number 0
-  , "repetitions" .= Number 0
-  , "stability"   .= Number 0
-  , "difficulty"  .= Number 0
+  , "stability"   .= Null
+  , "difficulty"  .= Null
   ]
 
 spec :: Spec
 spec = do
   describe "FSRS Card State" $ do
     it "serialize each CardState to the correct number in JSON" $ do
-      toJSON New `shouldBe` Number 0
       toJSON Learning `shouldBe` Number 1
       toJSON Reviewing `shouldBe` Number 2
       toJSON Relearning `shouldBe` Number 3
     it "deserialize numbers from JSON to the correct CardStat" $ do
-      eitherDecode "0" `shouldBe` Right New
       eitherDecode "1" `shouldBe` Right Learning
       eitherDecode "2" `shouldBe` Right Reviewing
     it "fail to deserialize out‑of‑range numbers" $ do
